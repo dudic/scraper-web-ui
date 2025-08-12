@@ -8,7 +8,10 @@ interface ImportFormProps {
 
 export function ImportForm({ onRunStart }: ImportFormProps) {
   const [actorId, setActorId] = useState('')
-  const [input, setInput] = useState('')
+  const [code, setCode] = useState('')
+  const [codeType, setCodeType] = useState('HR_COCKPIT')
+  const [customInput, setCustomInput] = useState('')
+  const [useCustomInput, setUseCustomInput] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -18,6 +21,14 @@ export function ImportForm({ onRunStart }: ImportFormProps) {
     setError('')
 
     try {
+      // Prepare input based on mode
+      let input = {}
+      if (useCustomInput && customInput) {
+        input = JSON.parse(customInput)
+      } else {
+        input = { code, codeType }
+      }
+      
       const response = await fetch('/api/import', {
         method: 'POST',
         headers: {
@@ -25,7 +36,7 @@ export function ImportForm({ onRunStart }: ImportFormProps) {
         },
         body: JSON.stringify({
           actorId,
-          input: input ? JSON.parse(input) : {},
+          input,
         }),
       })
 
@@ -38,7 +49,10 @@ export function ImportForm({ onRunStart }: ImportFormProps) {
       
       // Reset form
       setActorId('')
-      setInput('')
+      setCode('')
+      setCodeType('HR_COCKPIT')
+      setCustomInput('')
+      setUseCustomInput(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
@@ -68,19 +82,69 @@ export function ImportForm({ onRunStart }: ImportFormProps) {
           />
         </div>
 
-        <div>
-          <label htmlFor="input" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            Input (JSON)
-          </label>
-          <textarea
-            id="input"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder='{"startUrls": ["https://example.com"]}'
-            rows={4}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+        <div className="flex items-center mb-4">
+          <input
+            type="checkbox"
+            id="useCustomInput"
+            checked={useCustomInput}
+            onChange={(e) => setUseCustomInput(e.target.checked)}
+            className="mr-2"
           />
+          <label htmlFor="useCustomInput" className="text-sm font-medium text-gray-700 dark:text-gray-300">
+            Use custom input (JSON)
+          </label>
         </div>
+
+        {!useCustomInput ? (
+          <>
+            <div>
+              <label htmlFor="code" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Code
+              </label>
+              <input
+                type="text"
+                id="code"
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                placeholder="Enter the code to search for"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                required
+              />
+            </div>
+
+            <div>
+              <label htmlFor="codeType" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Code Type
+              </label>
+              <select
+                id="codeType"
+                value={codeType}
+                onChange={(e) => setCodeType(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+                required
+              >
+                <option value="HR_COCKPIT">HR Cockpit</option>
+                <option value="HR_COCKPIT_SOLL">HR Cockpit Soll</option>
+                <option value="PROFILING_VALUES">Profiling Values</option>
+                <option value="PROFILING_VALUES_SOLL">Profiling Values Soll</option>
+              </select>
+            </div>
+          </>
+        ) : (
+          <div>
+            <label htmlFor="customInput" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Custom Input (JSON)
+            </label>
+            <textarea
+              id="customInput"
+              value={customInput}
+              onChange={(e) => setCustomInput(e.target.value)}
+              placeholder='{"code": "ABC123", "codeType": "HR_COCKPIT"}'
+              rows={4}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
+            />
+          </div>
+        )}
 
         {error && (
           <div className="text-red-600 dark:text-red-400 text-sm">
