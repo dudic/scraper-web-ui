@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import Apify from 'apify-client'
+import { ApifyClient } from 'apify-client'
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const client = new Apify({
+    const client = new ApifyClient({
       token: apifyToken,
     })
 
