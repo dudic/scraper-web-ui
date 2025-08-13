@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
 export async function POST(request: NextRequest) {
+  console.log('Actor update request received')
   try {
     // Verify authorization
     const auth = request.headers.get('authorization')?.replace('Bearer ', '')
@@ -45,6 +46,22 @@ export async function POST(request: NextRequest) {
     // Initialize Supabase client
     const supabaseUrl = process.env.SUPABASE_URL!
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+    
+    console.log('Supabase URL:', supabaseUrl ? 'Set' : 'Missing')
+    console.log('Supabase Key:', supabaseKey ? 'Set' : 'Missing')
+    console.log('Run ID:', runId)
+    console.log('Done:', done)
+    console.log('Total:', total)
+    console.log('Status:', status)
+    
+    if (!supabaseUrl || !supabaseKey) {
+      console.error('Missing Supabase environment variables')
+      return NextResponse.json(
+        { error: 'Database configuration error' },
+        { status: 500 }
+      )
+    }
+    
     const supabase = createClient(supabaseUrl, supabaseKey)
 
     // Prepare data for insert/update
@@ -60,6 +77,8 @@ export async function POST(request: NextRequest) {
     if (total !== undefined) runData.total = total
     if (error) runData.error = error
     
+    console.log('Attempting to upsert run data:', runData)
+    
     // Try to upsert (insert or update) the run record
     const { error: dbError } = await supabase
       .from('runs')
@@ -68,11 +87,12 @@ export async function POST(request: NextRequest) {
     if (dbError) {
       console.error('Database error:', dbError)
       return NextResponse.json(
-        { error: 'Failed to update run record' },
+        { error: 'Failed to update run record', details: dbError.message },
         { status: 500 }
       )
     }
 
+    console.log('Successfully upserted run:', runId, 'with status:', finalStatus)
     return NextResponse.json({ 
       ok: true, 
       runId, 
