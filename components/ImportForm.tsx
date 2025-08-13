@@ -7,7 +7,7 @@ interface ImportFormProps {
 }
 
 export function ImportForm({ onRunStart }: ImportFormProps) {
-  const [actorId, setActorId] = useState('')
+  const [actorId, setActorId] = useState('HceSv1pj0Y3PZTMvG')
   const [code, setCode] = useState('')
   const [codeType, setCodeType] = useState('HR_COCKPIT')
   const [customInput, setCustomInput] = useState('')
@@ -48,7 +48,7 @@ export function ImportForm({ onRunStart }: ImportFormProps) {
       onRunStart(data.runId)
       
       // Reset form
-      setActorId('')
+      setActorId('HceSv1pj0Y3PZTMvG')
       setCode('')
       setCodeType('HR_COCKPIT')
       setCustomInput('')
@@ -71,15 +71,15 @@ export function ImportForm({ onRunStart }: ImportFormProps) {
           <label htmlFor="actorId" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             Actor ID
           </label>
-          <input
-            type="text"
+          <select
             id="actorId"
             value={actorId}
             onChange={(e) => setActorId(e.target.value)}
-            placeholder="Enter Apify Actor ID"
             className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
             required
-          />
+          >
+            <option value="HceSv1pj0Y3PZTMvG">HceSv1pj0Y3PZTMvG</option>
+          </select>
         </div>
 
         <div className="flex items-center mb-4">
