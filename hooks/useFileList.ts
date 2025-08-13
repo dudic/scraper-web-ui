@@ -14,6 +14,7 @@ interface FileListResponse {
   runStatus: string
   fileCount: number
   files: File[]
+  error?: string
 }
 
 export function useFileList(runId: string | null) {

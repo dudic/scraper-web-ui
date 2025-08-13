@@ -103,12 +103,13 @@ export async function POST(
     const fileMetadata: FileMetadata[] = []
     
     for (const item of datasetItems.items) {
-      if (item.fileUrl && item.fileName) {
+      const itemData = item as any // Type assertion for dataset items
+      if (itemData.fileUrl && itemData.fileName) {
         fileMetadata.push({
-          apifyKey: item.fileUrl.split('/').pop() || item.fileName,
-          filename: item.fileName,
-          contentType: item.contentType || 'application/octet-stream',
-          fileSize: item.fileSize
+          apifyKey: (itemData.fileUrl as string).split('/').pop() || itemData.fileName,
+          filename: itemData.fileName as string,
+          contentType: (itemData.contentType as string) || 'application/octet-stream',
+          fileSize: itemData.fileSize as number
         })
       }
     }
@@ -142,7 +143,8 @@ export async function POST(
         } else if (typeof fileRecord.value === 'string') {
           fileBuffer = Buffer.from(fileRecord.value, 'binary')
         } else {
-          fileBuffer = Buffer.from(fileRecord.value)
+          // Handle other types by converting to string first
+          fileBuffer = Buffer.from(String(fileRecord.value))
         }
 
         // Generate unique filename for Supabase Storage
@@ -175,7 +177,7 @@ export async function POST(
         }
 
         // Insert file metadata into database
-        const { data: fileRecord, error: dbError } = await supabase
+        const { data: dbFileRecord, error: dbError } = await supabase
           .from('files')
           .insert({
             run_id: runId,
@@ -196,7 +198,7 @@ export async function POST(
         }
 
         processedFiles.push({
-          id: fileRecord.id,
+          id: dbFileRecord.id,
           apifyKey: metadata.apifyKey,
           filename: metadata.filename,
           contentType: metadata.contentType,
