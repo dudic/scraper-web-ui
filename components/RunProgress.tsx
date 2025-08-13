@@ -80,6 +80,11 @@ export function RunProgress({ runId }: RunProgressProps) {
               </span>
               <span className="ml-2 text-sm text-gray-500 dark:text-gray-400">
                 {done}/{total}
+                {total > 0 && (
+                  <span className="ml-1 text-xs text-gray-400">
+                    ({Math.round((done / total) * 100)}%)
+                  </span>
+                )}
               </span>
             </div>
           </div>
@@ -101,6 +106,11 @@ export function RunProgress({ runId }: RunProgressProps) {
             <p className="text-green-800 dark:text-green-200 text-sm">
               ✅ Import completed successfully! Check the run history below for download links.
             </p>
+            {done !== undefined && total !== undefined && total > 0 && (
+              <p className="text-green-700 dark:text-green-300 text-xs mt-1">
+                Processed {done} out of {total} items ({Math.round((done / total) * 100)}%)
+              </p>
+            )}
           </div>
         )}
 
@@ -114,6 +124,14 @@ export function RunProgress({ runId }: RunProgressProps) {
                 Error: {error}
               </p>
             )}
+          </div>
+        )}
+
+        {status === 'RUNNING' && pct === 0 && (
+          <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md">
+            <p className="text-blue-800 dark:text-blue-200 text-sm">
+              🔄 Run is starting up... Please wait for progress updates.
+            </p>
           </div>
         )}
       </div>

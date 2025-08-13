@@ -23,25 +23,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Calculate percentage if done and total are provided
-    let pct = 0
-    let finalStatus = status || 'RUNNING'
-    
-    if (done !== undefined && total !== undefined && total > 0) {
-      pct = Math.round((done / total) * 100)
-      // Override status based on completion
-      if (pct === 100) {
-        finalStatus = 'SUCCEEDED'
-      } else if (finalStatus === 'COMPLETED') {
-        finalStatus = 'SUCCEEDED'
-      }
-    }
-    
-    // Handle error status
-    if (error) {
-      finalStatus = 'FAILED'
-    }
-
     // Initialize Supabase client
     const supabaseUrl = process.env.SUPABASE_URL!
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -56,6 +37,60 @@ export async function POST(request: NextRequest) {
     
     const supabase = createClient(supabaseUrl, supabaseKey)
 
+    // Get current run data to preserve existing values
+    const { data: currentRun } = await supabase
+      .from('runs')
+      .select('*')
+      .eq('id', runId)
+      .single()
+
+    // Calculate percentage and determine final status
+    let pct = 0
+    let finalStatus = status || 'RUNNING'
+    let finalDone = done
+    let finalTotal = total
+    
+    // Handle error status
+    if (error) {
+      finalStatus = 'FAILED'
+    }
+    
+    // Handle completion logic
+    if (status === 'SUCCEEDED' || status === 'COMPLETED' || status === 'FINISHED') {
+      finalStatus = 'SUCCEEDED'
+      
+      // If this is a completion update, preserve the highest done/total values
+      if (currentRun) {
+        // Use the maximum of current and new values to prevent reverting
+        if (done !== undefined && total !== undefined) {
+          finalDone = Math.max(currentRun.done || 0, done)
+          finalTotal = Math.max(currentRun.total || 0, total)
+        } else {
+          // If no done/total provided in completion update, keep existing values
+          finalDone = currentRun.done
+          finalTotal = currentRun.total
+        }
+      }
+      
+      // Set percentage to 100 for completed runs
+      pct = 100
+    } else if (done !== undefined && total !== undefined && total > 0) {
+      // For running updates, calculate percentage normally
+      pct = Math.round((done / total) * 100)
+      finalDone = done
+      finalTotal = total
+      
+      // If we reach 100%, mark as succeeded
+      if (pct === 100) {
+        finalStatus = 'SUCCEEDED'
+      }
+    } else if (currentRun) {
+      // If no done/total provided but we have existing data, preserve it
+      finalDone = currentRun.done
+      finalTotal = currentRun.total
+      pct = currentRun.pct
+    }
+
     // Prepare data for insert/update
     const runData: any = {
       id: runId,
@@ -64,9 +99,9 @@ export async function POST(request: NextRequest) {
       updated_at: new Date().toISOString(),
     }
     
-    // Only update done/total if provided
-    if (done !== undefined) runData.done = done
-    if (total !== undefined) runData.total = total
+    // Only update done/total if we have valid values
+    if (finalDone !== undefined) runData.done = finalDone
+    if (finalTotal !== undefined) runData.total = finalTotal
     if (error) runData.error = error
     
     // Try to upsert (insert or update) the run record
@@ -81,11 +116,14 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       )
     }
+    
     return NextResponse.json({ 
       ok: true, 
       runId, 
       pct, 
-      status: finalStatus 
+      status: finalStatus,
+      done: finalDone,
+      total: finalTotal
     })
   } catch (error) {
     console.error('Actor update error:', error)

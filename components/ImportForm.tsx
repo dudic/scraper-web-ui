@@ -24,7 +24,11 @@ export function ImportForm({ onRunStart }: ImportFormProps) {
       // Prepare input based on mode
       let input = {}
       if (useCustomInput && customInput) {
-        input = JSON.parse(customInput)
+        try {
+          input = JSON.parse(customInput)
+        } catch (parseError) {
+          throw new Error('Invalid JSON format in custom input')
+        }
       } else {
         input = { code, codeType }
       }
@@ -40,11 +44,23 @@ export function ImportForm({ onRunStart }: ImportFormProps) {
         }),
       })
 
+      const data = await response.json()
+
       if (!response.ok) {
-        throw new Error('Failed to start import')
+        // Provide more specific error messages based on the response
+        if (response.status === 400) {
+          throw new Error(data.error || 'Invalid request data')
+        } else if (response.status === 500) {
+          throw new Error(data.error || 'Server error occurred')
+        } else {
+          throw new Error(data.error || `Request failed with status ${response.status}`)
+        }
       }
 
-      const data = await response.json()
+      if (!data.runId) {
+        throw new Error('No run ID received from server')
+      }
+
       onRunStart(data.runId)
       
       // Reset form
@@ -54,7 +70,7 @@ export function ImportForm({ onRunStart }: ImportFormProps) {
       setCustomInput('')
       setUseCustomInput(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred')
+      setError(err instanceof Error ? err.message : 'An unexpected error occurred')
     } finally {
       setIsLoading(false)
     }
