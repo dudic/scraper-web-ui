@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
 export async function POST(request: NextRequest) {
-  console.log('Actor update request received')
   try {
     // Verify authorization
     const auth = request.headers.get('authorization')?.replace('Bearer ', '')
@@ -47,13 +46,6 @@ export async function POST(request: NextRequest) {
     const supabaseUrl = process.env.SUPABASE_URL!
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
     
-    console.log('Supabase URL:', supabaseUrl ? 'Set' : 'Missing')
-    console.log('Supabase Key:', supabaseKey ? 'Set' : 'Missing')
-    console.log('Run ID:', runId)
-    console.log('Done:', done)
-    console.log('Total:', total)
-    console.log('Status:', status)
-    
     if (!supabaseUrl || !supabaseKey) {
       console.error('Missing Supabase environment variables')
       return NextResponse.json(
@@ -77,8 +69,6 @@ export async function POST(request: NextRequest) {
     if (total !== undefined) runData.total = total
     if (error) runData.error = error
     
-    console.log('Attempting to upsert run data:', runData)
-    
     // Try to upsert (insert or update) the run record
     const { error: dbError } = await supabase
       .from('runs')
@@ -91,8 +81,6 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       )
     }
-
-    console.log('Successfully upserted run:', runId, 'with status:', finalStatus)
     return NextResponse.json({ 
       ok: true, 
       runId, 
