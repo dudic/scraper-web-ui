@@ -47,22 +47,23 @@ export async function POST(request: NextRequest) {
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
     const supabase = createClient(supabaseUrl, supabaseKey)
 
-    // Update run record
-    const updateData: any = {
+    // Prepare data for insert/update
+    const runData: any = {
+      id: runId,
       pct,
       status: finalStatus,
       updated_at: new Date().toISOString(),
     }
     
     // Only update done/total if provided
-    if (done !== undefined) updateData.done = done
-    if (total !== undefined) updateData.total = total
-    if (error) updateData.error = error
+    if (done !== undefined) runData.done = done
+    if (total !== undefined) runData.total = total
+    if (error) runData.error = error
     
+    // Try to upsert (insert or update) the run record
     const { error: dbError } = await supabase
       .from('runs')
-      .update(updateData)
-      .eq('id', runId)
+      .upsert(runData, { onConflict: 'id' })
 
     if (dbError) {
       console.error('Database error:', dbError)
