@@ -12,6 +12,7 @@ interface RunData {
   error?: string
   started_at: string
   updated_at: string
+  file_count?: number
 }
 
 export function useRunList() {

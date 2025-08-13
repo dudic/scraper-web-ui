@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from 'react'
 import { useRunList } from '@/hooks/useRunList'
+import { FileList } from './FileList'
 
 export function RunList() {
   const { runs, isLoading } = useRunList()
+  const [selectedRunId, setSelectedRunId] = useState<string | null>(null)
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -61,10 +63,16 @@ export function RunList() {
                   Items
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Files
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Started
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                   Updated
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Actions
                 </th>
               </tr>
             </thead>
@@ -96,15 +104,41 @@ export function RunList() {
                     {run.done !== undefined && run.total !== undefined ? `${run.done}/${run.total}` : '-'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                    {run.file_count ? (
+                      <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full dark:bg-blue-900/20 dark:text-blue-400">
+                        📁 {run.file_count}
+                      </span>
+                    ) : '-'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                     {run.started_at ? new Date(run.started_at).toLocaleString() : '-'}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                     {run.updated_at ? new Date(run.updated_at).toLocaleString() : '-'}
                   </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                    {run.status === 'SUCCEEDED' && (
+                      <button
+                        onClick={() => setSelectedRunId(selectedRunId === run.id ? null : run.id)}
+                        className="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 dark:bg-blue-900 dark:text-blue-300 dark:hover:bg-blue-800"
+                      >
+                        {selectedRunId === run.id ? 'Hide Files' : 'View Files'}
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* File List Section */}
+      {selectedRunId && (
+        <div className="mt-8">
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+            <FileList runId={selectedRunId} />
+          </div>
         </div>
       )}
     </div>

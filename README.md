@@ -7,6 +7,7 @@ A real-time web scraping dashboard built with Next.js, Supabase, and Apify. This
 - 🚀 **Real-time Progress Tracking**: Live progress updates using Supabase Realtime
 - 🎨 **Modern UI**: Beautiful, responsive design with dark mode support
 - 📊 **Run History**: Complete history of all scraping runs
+- 📁 **File Storage & Downloads**: Secure file storage with easy download access
 - 🔐 **Secure**: API authentication for actor callbacks
 - ☁️ **Serverless**: Built for Vercel deployment
 - 📱 **Responsive**: Works on desktop and mobile devices
@@ -33,6 +34,10 @@ A real-time web scraping dashboard built with Next.js, Supabase, and Apify. This
 │    (scraper container)  │                                └────────────────────┘
 └─────────────────────────┘
 ```
+
+## ⚠️ **Important Note: Legacy Supabase API**
+
+This project currently uses **Legacy Supabase API keys**. See `SUPABASE_LEGACY_NOTES.md` for important details about the current implementation and future migration requirements.
 
 ## Quick Start
 
@@ -71,6 +76,11 @@ Required environment variables:
 - `APIFY_TOKEN`: Your Apify API token
 - `ACTOR_SECRET`: A shared secret for actor authentication
 - `FRONT_URL`: Your Vercel app URL (for production)
+
+Optional file processing variables:
+- `FILE_PROCESSING_TIMEOUT`: File processing timeout in milliseconds (default: 300000)
+- `MAX_CONCURRENT_DOWNLOADS`: Maximum concurrent file downloads (default: 5)
+- `SIGNED_URL_EXPIRY`: Signed URL expiry time in seconds (default: 3600)
 
 ### 4. Run Development Server
 
@@ -190,8 +200,59 @@ Authorization: Bearer your-actor-secret
 - `COMPLETED` - Actor finished successfully (auto-converted to SUCCEEDED)
 - `FAILED` - Actor encountered an error
 
+### File Management Endpoints
+
+#### POST /api/files/process/{runId}
+Processes files from APIFY for a completed run.
+
+**Headers:**
+```
+Authorization: Bearer your-actor-secret
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "processedFiles": 5,
+  "totalFiles": 5,
+  "errors": []
+}
+```
+
+#### GET /api/files/{runId}
+Lists all files for a specific run.
+
+**Response:**
+```json
+{
+  "files": [
+    {
+      "id": "uuid",
+      "filename": "report.pdf",
+      "contentType": "application/pdf",
+      "fileSize": 1024000,
+      "downloadUrl": "https://...",
+      "createdAt": "2025-01-15T10:30:00Z"
+    }
+  ]
+}
+```
+
+#### GET /api/files/{fileId}/download
+Generates a signed download URL for a specific file.
+
+**Response:**
+```json
+{
+  "downloadUrl": "https://...",
+  "expiresAt": "2025-01-15T11:30:00Z"
+}
+```
+
 ## Database Schema
 
+### Runs Table
 ```sql
 CREATE TABLE runs (
   id         TEXT PRIMARY KEY,      -- Apify runId
@@ -200,7 +261,24 @@ CREATE TABLE runs (
   done       INTEGER DEFAULT 0,     -- Number of completed items
   total      INTEGER DEFAULT 0,     -- Total number of items
   error      TEXT,                  -- Error message if failed
+  file_count INTEGER DEFAULT 0,     -- Number of files associated with run
   started_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+### Files Table
+```sql
+CREATE TABLE files (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+  apify_key TEXT NOT NULL,           -- Original APIFY key
+  filename TEXT NOT NULL,            -- Display name
+  content_type TEXT NOT NULL,        -- MIME type
+  file_size BIGINT,                  -- File size in bytes
+  supabase_path TEXT,                -- Path in Supabase storage
+  download_url TEXT,                 -- Signed download URL
+  created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 ```
@@ -213,16 +291,29 @@ CREATE TABLE runs (
 scraper-web-ui/
 ├── app/                    # Next.js app directory
 │   ├── api/               # API routes
+│   │   ├── files/         # File management endpoints
+│   │   ├── import/        # Import functionality
+│   │   └── actor-update/  # Actor progress updates
 │   ├── globals.css        # Global styles
 │   ├── layout.tsx         # Root layout
 │   └── page.tsx           # Main page
 ├── components/            # React components
 │   ├── ImportForm.tsx    # Form to start imports
 │   ├── RunProgress.tsx   # Progress display
-│   └── RunList.tsx       # Run history table
+│   ├── RunList.tsx       # Run history table
+│   ├── FileList.tsx      # File management UI
+│   └── FileDownload.tsx  # File download component
 ├── hooks/                # Custom React hooks
 │   ├── useRunProgress.ts # Real-time progress hook
-│   └── useRunList.ts     # Run list hook
+│   ├── useRunList.ts     # Run list hook
+│   ├── useFileList.ts    # File list hook
+│   └── useFileDownload.ts # File download hook
+├── lib/                  # Utility libraries
+│   ├── apify.ts          # APIFY integration
+│   ├── fileProcessor.ts  # File processing logic
+│   └── supabaseStorage.ts # Supabase storage utilities
+├── types/                # TypeScript type definitions
+│   └── file.ts           # File-related types
 ├── supabase/             # Database migrations
 └── public/              # Static assets
 ```
@@ -233,6 +324,34 @@ scraper-web-ui/
 - `npm run build` - Build for production
 - `npm run start` - Start production server
 - `npm run lint` - Run ESLint
+
+## File Storage Features
+
+The Scraper Dashboard includes comprehensive file storage and download capabilities:
+
+### How It Works
+1. **APIFY Integration**: Files are downloaded from APIFY Key-Value Store
+2. **Secure Storage**: Files are stored in Supabase Storage with private access
+3. **Easy Access**: Users can download files through secure signed URLs
+4. **Real-time Updates**: File processing status is updated in real-time
+
+### File Types Supported
+- PDF documents
+- CSV data files
+- JSON reports
+- Excel spreadsheets
+- Word documents
+
+### Security Features
+- Private storage bucket
+- Time-limited download URLs
+- File type validation
+- Size restrictions (100MB max)
+
+For detailed implementation information, see:
+- [FILE_STORAGE_FEATURES.md](./FILE_STORAGE_FEATURES.md) - Complete feature documentation
+- [API_ENDPOINTS.md](./API_ENDPOINTS.md) - API reference
+- [IMPLEMENTATION_ROADMAP.md](./IMPLEMENTATION_ROADMAP.md) - Development roadmap
 
 ## Contributing
 
