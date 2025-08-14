@@ -2,6 +2,35 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { ApifyClient } from 'apify-client'
 
+// Helper function to determine content type from filename
+function getContentTypeFromFilename(filename: string): string {
+  const ext = filename.toLowerCase().split('.').pop()
+  switch (ext) {
+    case 'pdf':
+      return 'application/pdf'
+    case 'csv':
+      return 'text/csv'
+    case 'xlsx':
+      return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    case 'xls':
+      return 'application/vnd.ms-excel'
+    case 'pptx':
+      return 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+    case 'ppt':
+      return 'application/vnd.ms-powerpoint'
+    case 'docx':
+      return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    case 'doc':
+      return 'application/msword'
+    case 'txt':
+      return 'text/plain'
+    case 'json':
+      return 'application/json'
+    default:
+      return 'application/octet-stream'
+  }
+}
+
 // Types for file processing
 interface FileMetadata {
   apifyKey: string
@@ -90,9 +119,31 @@ export async function POST(
       )
     }
 
-    // Get the dataset from APIFY
-    const dataset = await apifyClient.dataset(runId)
-    const datasetItems = await dataset.listItems()
+    // Get run info from APIFY to find the actual dataset and key-value store IDs
+    let apifyRun
+    try {
+      apifyRun = await apifyClient.run(runId)
+    } catch (error) {
+      console.error('Failed to get APIFY run info:', error)
+      return NextResponse.json(
+        { error: 'Failed to get run information from APIFY' },
+        { status: 500 }
+      )
+    }
+
+    // Get the dataset from APIFY using the run ID
+    let dataset
+    let datasetItems
+    try {
+      dataset = await apifyClient.dataset(runId)
+      datasetItems = await dataset.listItems()
+    } catch (error) {
+      console.error('Failed to access dataset:', error)
+      return NextResponse.json(
+        { error: 'Failed to access dataset from APIFY' },
+        { status: 500 }
+      )
+    }
 
     if (!datasetItems.items || datasetItems.items.length === 0) {
       return NextResponse.json(
@@ -106,7 +157,24 @@ export async function POST(
     
     for (const item of datasetItems.items) {
       const itemData = item as any // Type assertion for dataset items
-      if (itemData.fileUrl && itemData.fileName) {
+      
+      // Handle the new data structure we found
+      if (itemData.reports && Array.isArray(itemData.reports)) {
+        // New structure: itemData.reports contains file information
+        for (const report of itemData.reports) {
+          if (report.url && report.name) {
+            const urlParts = report.url.split('/')
+            const apifyKey = urlParts[urlParts.length - 1] // Get filename from URL
+            fileMetadata.push({
+              apifyKey,
+              filename: report.name,
+              contentType: getContentTypeFromFilename(report.name),
+              fileSize: 0 // Will be determined when downloading
+            })
+          }
+        }
+      } else if (itemData.fileUrl && itemData.fileName) {
+        // Old structure: direct file metadata
         fileMetadata.push({
           apifyKey: (itemData.fileUrl as string).split('/').pop() || itemData.fileName,
           filename: itemData.fileName as string,
@@ -129,9 +197,17 @@ export async function POST(
 
     for (const metadata of fileMetadata) {
       try {
-        // Download file from APIFY Key-Value Store
-        const keyValueStore = await apifyClient.keyValueStore(runId)
-        const fileRecord = await keyValueStore.getRecord(metadata.apifyKey)
+        // Download file from APIFY Key-Value Store using the run ID
+        let keyValueStore
+        let fileRecord
+        try {
+          keyValueStore = await apifyClient.keyValueStore(runId)
+          fileRecord = await keyValueStore.getRecord(metadata.apifyKey)
+        } catch (error) {
+          console.error(`Failed to access key-value store for file ${metadata.filename}:`, error)
+          errors.push(`Failed to access file ${metadata.filename} from APIFY`)
+          continue
+        }
 
         if (!fileRecord || !fileRecord.value) {
           errors.push(`File not found in APIFY: ${metadata.filename}`)
