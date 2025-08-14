@@ -200,8 +200,8 @@ export async function POST(
 
     for (const metadata of fileMetadata) {
       try {
-                 // Download file from APIFY Key-Value Store using direct API call
-         let fileRecord
+                          // Download file from APIFY Key-Value Store using direct API call
+         let fileRecord: ArrayBuffer | Buffer | string
          try {
            const keyValueStoreId = 'NQniMkP2rxCTyPpq1' // Hardcoded for now - this should be dynamic
            const keyValueResponse = await fetch(`https://api.apify.com/v2/key-value-stores/${keyValueStoreId}/records/${metadata.apifyKey}`, {
@@ -210,14 +210,15 @@ export async function POST(
                'Content-Type': 'application/json'
              }
            })
-          
-          if (!keyValueResponse.ok) {
-            console.error(`Failed to fetch file ${metadata.filename}:`, keyValueResponse.status, keyValueResponse.statusText)
-            errors.push(`Failed to access file ${metadata.filename} from APIFY`)
-            continue
-          }
-          
-          fileRecord = await keyValueResponse.json()
+           
+           if (!keyValueResponse.ok) {
+             console.error(`Failed to fetch file ${metadata.filename}:`, keyValueResponse.status, keyValueResponse.statusText)
+             errors.push(`Failed to access file ${metadata.filename} from APIFY`)
+             continue
+           }
+           
+           // For binary files, we need to get the raw data, not JSON
+           fileRecord = await keyValueResponse.arrayBuffer()
         } catch (error) {
           console.error(`Error fetching file ${metadata.filename}:`, error)
           errors.push(`Failed to access file ${metadata.filename} from APIFY`)
@@ -229,16 +230,20 @@ export async function POST(
           continue
         }
 
-        // Convert to Buffer if needed
-        let fileBuffer: Buffer
-        if (fileRecord instanceof Buffer) {
-          fileBuffer = fileRecord
-        } else if (typeof fileRecord === 'string') {
-          fileBuffer = Buffer.from(fileRecord, 'binary')
-        } else {
-          // Handle other types by converting to string first
-          fileBuffer = Buffer.from(String(fileRecord))
-        }
+                 // Convert ArrayBuffer to Buffer
+         let fileBuffer: Buffer
+         if (fileRecord && typeof fileRecord === 'object' && 'byteLength' in fileRecord) {
+           // It's an ArrayBuffer
+           fileBuffer = Buffer.from(fileRecord as ArrayBuffer)
+         } else if (fileRecord && typeof fileRecord === 'object' && 'length' in fileRecord && 'read' in fileRecord) {
+           // It's a Buffer
+           fileBuffer = fileRecord as Buffer
+         } else if (typeof fileRecord === 'string') {
+           fileBuffer = Buffer.from(fileRecord, 'binary')
+         } else {
+           // Handle other types by converting to string first
+           fileBuffer = Buffer.from(String(fileRecord))
+         }
 
         // Generate unique filename for Supabase Storage
         const timestamp = Date.now()
