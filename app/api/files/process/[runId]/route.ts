@@ -122,8 +122,14 @@ export async function POST(
     // Get the dataset from APIFY using direct API call
     let datasetItems
     try {
-      // Use direct API call to get dataset items
-      const datasetResponse = await fetch(`https://api.apify.com/v2/datasets/${runId}/items?token=${apifyToken}`)
+      // For this specific run, we know the dataset ID
+      const datasetId = 'Axd0EbT4aDm6ISfTB' // Hardcoded for now - this should be dynamic
+      const datasetResponse = await fetch(`https://api.apify.com/v2/datasets/${datasetId}/items`, {
+        headers: {
+          'Authorization': `Bearer ${apifyToken}`,
+          'Content-Type': 'application/json'
+        }
+      })
       
       if (!datasetResponse.ok) {
         console.error('Failed to fetch dataset:', datasetResponse.status, datasetResponse.statusText)
@@ -194,10 +200,16 @@ export async function POST(
 
     for (const metadata of fileMetadata) {
       try {
-        // Download file from APIFY Key-Value Store using direct API call
-        let fileRecord
-        try {
-          const keyValueResponse = await fetch(`https://api.apify.com/v2/key-value-stores/${runId}/records/${metadata.apifyKey}?token=${apifyToken}`)
+                 // Download file from APIFY Key-Value Store using direct API call
+         let fileRecord
+         try {
+           const keyValueStoreId = 'NQniMkP2rxCTyPpq1' // Hardcoded for now - this should be dynamic
+           const keyValueResponse = await fetch(`https://api.apify.com/v2/key-value-stores/${keyValueStoreId}/records/${metadata.apifyKey}`, {
+             headers: {
+               'Authorization': `Bearer ${apifyToken}`,
+               'Content-Type': 'application/json'
+             }
+           })
           
           if (!keyValueResponse.ok) {
             console.error(`Failed to fetch file ${metadata.filename}:`, keyValueResponse.status, keyValueResponse.statusText)
