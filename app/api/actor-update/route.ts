@@ -116,6 +116,31 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       )
     }
+
+    // Trigger file processing if run just completed
+    let fileProcessingTriggered = false
+    if (finalStatus === 'SUCCEEDED' && currentRun?.status !== 'SUCCEEDED') {
+      try {
+        // Trigger file processing asynchronously (don't wait for it)
+        const baseUrl = process.env.FRONT_URL?.replace(/\/+$/, '') || 'http://localhost:3000';
+        const fileProcessingUrl = `${baseUrl}/api/files/process/${runId}`;
+        
+        console.log(`Triggering file processing for run ${runId} at: ${fileProcessingUrl}`);
+        
+        fetch(fileProcessingUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }).catch(error => {
+          console.error('Failed to trigger file processing:', error)
+        })
+        
+        fileProcessingTriggered = true
+      } catch (error) {
+        console.error('Error triggering file processing:', error)
+      }
+    }
     
     return NextResponse.json({ 
       ok: true, 
@@ -123,7 +148,8 @@ export async function POST(request: NextRequest) {
       pct, 
       status: finalStatus,
       done: finalDone,
-      total: finalTotal
+      total: finalTotal,
+      fileProcessingTriggered
     })
   } catch (error) {
     console.error('Actor update error:', error)
