@@ -26,8 +26,10 @@ export async function POST(
 ) {
   try {
     const { runId } = params
+    console.log(`Processing files for run: ${runId}`);
 
     if (!runId) {
+      console.log('Error: Run ID is required');
       return NextResponse.json(
         { error: 'Run ID is required' },
         { status: 400 }
@@ -238,7 +240,11 @@ export async function POST(
   } catch (error) {
     console.error('File processing error:', error)
     return NextResponse.json(
-      { error: 'Failed to process files' },
+      { 
+        error: 'Failed to process files', 
+        details: error instanceof Error ? error.message : 'Unknown error',
+        runId: params.runId
+      },
       { status: 500 }
     )
   }

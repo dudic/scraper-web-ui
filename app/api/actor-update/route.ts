@@ -122,7 +122,12 @@ export async function POST(request: NextRequest) {
     if (finalStatus === 'SUCCEEDED' && currentRun?.status !== 'SUCCEEDED') {
       try {
         // Trigger file processing asynchronously (don't wait for it)
-        fetch(`${process.env.FRONT_URL || 'http://localhost:3000'}/api/files/process/${runId}`, {
+        const baseUrl = process.env.FRONT_URL?.replace(/\/+$/, '') || 'http://localhost:3000';
+        const fileProcessingUrl = `${baseUrl}/api/files/process/${runId}`;
+        
+        console.log(`Triggering file processing for run ${runId} at: ${fileProcessingUrl}`);
+        
+        fetch(fileProcessingUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
