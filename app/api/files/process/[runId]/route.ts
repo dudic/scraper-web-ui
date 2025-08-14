@@ -2,6 +2,35 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { ApifyClient } from 'apify-client'
 
+// Helper function to determine content type from filename
+function getContentTypeFromFilename(filename: string): string {
+  const ext = filename.toLowerCase().split('.').pop()
+  switch (ext) {
+    case 'pdf':
+      return 'application/pdf'
+    case 'csv':
+      return 'text/csv'
+    case 'xlsx':
+      return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    case 'xls':
+      return 'application/vnd.ms-excel'
+    case 'pptx':
+      return 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+    case 'ppt':
+      return 'application/vnd.ms-powerpoint'
+    case 'docx':
+      return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    case 'doc':
+      return 'application/msword'
+    case 'txt':
+      return 'text/plain'
+    case 'json':
+      return 'application/json'
+    default:
+      return 'application/octet-stream'
+  }
+}
+
 // Types for file processing
 interface FileMetadata {
   apifyKey: string
@@ -90,11 +119,30 @@ export async function POST(
       )
     }
 
-    // Get the dataset from APIFY
-    const dataset = await apifyClient.dataset(runId)
-    const datasetItems = await dataset.listItems()
+    // Get the dataset from APIFY using direct API call
+    let datasetItems
+    try {
+      // Use direct API call to get dataset items
+      const datasetResponse = await fetch(`https://api.apify.com/v2/datasets/${runId}/items?token=${apifyToken}`)
+      
+      if (!datasetResponse.ok) {
+        console.error('Failed to fetch dataset:', datasetResponse.status, datasetResponse.statusText)
+        return NextResponse.json(
+          { error: 'Failed to access dataset from APIFY' },
+          { status: 500 }
+        )
+      }
+      
+      datasetItems = await datasetResponse.json()
+    } catch (error) {
+      console.error('Error fetching dataset:', error)
+      return NextResponse.json(
+        { error: 'Failed to access dataset from APIFY' },
+        { status: 500 }
+      )
+    }
 
-    if (!datasetItems.items || datasetItems.items.length === 0) {
+    if (!datasetItems || datasetItems.length === 0) {
       return NextResponse.json(
         { message: 'No files found in dataset' },
         { status: 200 }
@@ -104,9 +152,26 @@ export async function POST(
     // Extract file metadata from dataset items
     const fileMetadata: FileMetadata[] = []
     
-    for (const item of datasetItems.items) {
+    for (const item of datasetItems) {
       const itemData = item as any // Type assertion for dataset items
-      if (itemData.fileUrl && itemData.fileName) {
+      
+      // Handle the new data structure we found
+      if (itemData.reports && Array.isArray(itemData.reports)) {
+        // New structure: itemData.reports contains file information
+        for (const report of itemData.reports) {
+          if (report.url && report.name) {
+            const urlParts = report.url.split('/')
+            const apifyKey = urlParts[urlParts.length - 1] // Get filename from URL
+            fileMetadata.push({
+              apifyKey,
+              filename: report.name,
+              contentType: getContentTypeFromFilename(report.name),
+              fileSize: 0 // Will be determined when downloading
+            })
+          }
+        }
+      } else if (itemData.fileUrl && itemData.fileName) {
+        // Old structure: direct file metadata
         fileMetadata.push({
           apifyKey: (itemData.fileUrl as string).split('/').pop() || itemData.fileName,
           filename: itemData.fileName as string,
@@ -129,24 +194,38 @@ export async function POST(
 
     for (const metadata of fileMetadata) {
       try {
-        // Download file from APIFY Key-Value Store
-        const keyValueStore = await apifyClient.keyValueStore(runId)
-        const fileRecord = await keyValueStore.getRecord(metadata.apifyKey)
+        // Download file from APIFY Key-Value Store using direct API call
+        let fileRecord
+        try {
+          const keyValueResponse = await fetch(`https://api.apify.com/v2/key-value-stores/${runId}/records/${metadata.apifyKey}?token=${apifyToken}`)
+          
+          if (!keyValueResponse.ok) {
+            console.error(`Failed to fetch file ${metadata.filename}:`, keyValueResponse.status, keyValueResponse.statusText)
+            errors.push(`Failed to access file ${metadata.filename} from APIFY`)
+            continue
+          }
+          
+          fileRecord = await keyValueResponse.json()
+        } catch (error) {
+          console.error(`Error fetching file ${metadata.filename}:`, error)
+          errors.push(`Failed to access file ${metadata.filename} from APIFY`)
+          continue
+        }
 
-        if (!fileRecord || !fileRecord.value) {
+        if (!fileRecord) {
           errors.push(`File not found in APIFY: ${metadata.filename}`)
           continue
         }
 
         // Convert to Buffer if needed
         let fileBuffer: Buffer
-        if (fileRecord.value instanceof Buffer) {
-          fileBuffer = fileRecord.value
-        } else if (typeof fileRecord.value === 'string') {
-          fileBuffer = Buffer.from(fileRecord.value, 'binary')
+        if (fileRecord instanceof Buffer) {
+          fileBuffer = fileRecord
+        } else if (typeof fileRecord === 'string') {
+          fileBuffer = Buffer.from(fileRecord, 'binary')
         } else {
           // Handle other types by converting to string first
-          fileBuffer = Buffer.from(String(fileRecord.value))
+          fileBuffer = Buffer.from(String(fileRecord))
         }
 
         // Generate unique filename for Supabase Storage
