@@ -6,6 +6,11 @@ export async function POST(request: NextRequest) {
   try {
     const { actorId, input } = await request.json()
 
+    // DEBUG: Log the received data
+    console.log('🔍 DEBUG - Received request data:')
+    console.log('  actorId:', actorId)
+    console.log('  input:', JSON.stringify(input, null, 2))
+
     if (!actorId) {
       return NextResponse.json(
         { error: 'Actor ID is required' },
@@ -46,6 +51,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    console.log('✅ Apify run started with ID:', run.id)
+
     // Initialize Supabase client
     const supabaseUrl = process.env.SUPABASE_URL!
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -64,6 +71,10 @@ export async function POST(request: NextRequest) {
     const code = input?.code || null
     const code_type = input?.codeType || null
 
+    console.log('🔍 DEBUG - Extracted values:')
+    console.log('  code:', code)
+    console.log('  code_type:', code_type)
+
     // Prepare data for database insertion
     const runData = {
       id: run.id,
@@ -77,6 +88,9 @@ export async function POST(request: NextRequest) {
       updated_at: new Date().toISOString(),
     }
 
+    console.log('🔍 DEBUG - Data to be inserted:')
+    console.log('  runData:', JSON.stringify(runData, null, 2))
+
     // Use upsert to handle existing run IDs
     const { data: insertedData, error: dbError } = await supabase
       .from('runs')
@@ -84,19 +98,22 @@ export async function POST(request: NextRequest) {
       .select()
 
     if (dbError) {
-      console.error('Database error:', dbError)
+      console.error('❌ Database error:', dbError)
       return NextResponse.json(
         { error: 'Failed to create run record in database' },
         { status: 500 }
       )
     }
 
+    console.log('✅ Database insertion successful:')
+    console.log('  insertedData:', JSON.stringify(insertedData, null, 2))
+
     return NextResponse.json({ 
       runId: run.id,
       message: 'Run started successfully'
     })
   } catch (error) {
-    console.error('Import error:', error)
+    console.error('❌ Import error:', error)
     return NextResponse.json(
       { error: 'Internal server error during import process' },
       { status: 500 }
