@@ -91,9 +91,8 @@ export async function POST(request: NextRequest) {
       pct = currentRun.pct
     }
 
-    // Prepare data for insert/update - PRESERVE existing code and code_type values
+    // Prepare data for update - ONLY progress-related fields
     const runData: any = {
-      id: runId,
       pct,
       status: finalStatus,
       updated_at: new Date().toISOString(),
@@ -104,27 +103,11 @@ export async function POST(request: NextRequest) {
     if (finalTotal !== undefined) runData.total = finalTotal
     if (error) runData.error = error
     
-    // CRITICAL FIX: Preserve code and code_type values from existing record
-    if (currentRun) {
-      // Preserve existing code and code_type values if they exist
-      if (currentRun.code !== null && currentRun.code !== undefined) {
-        runData.code = currentRun.code
-      }
-      if (currentRun.code_type !== null && currentRun.code_type !== undefined) {
-        runData.code_type = currentRun.code_type
-      }
-    }
-    
-    console.log('🔍 Actor Update - Preserving code values:')
-    console.log('  currentRun.code:', currentRun?.code)
-    console.log('  currentRun.code_type:', currentRun?.code_type)
-    console.log('  runData.code:', runData.code)
-    console.log('  runData.code_type:', runData.code_type)
-    
-    // Try to upsert (insert or update) the run record
+    // Use UPDATE instead of UPSERT - we only update progress fields
     const { error: dbError } = await supabase
       .from('runs')
-      .upsert(runData, { onConflict: 'id' })
+      .update(runData)
+      .eq('id', runId)
 
     if (dbError) {
       console.error('Database error:', dbError)
