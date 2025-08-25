@@ -60,11 +60,17 @@ export async function POST(request: NextRequest) {
     
     const supabase = createClient(supabaseUrl, supabaseKey)
 
+    // Extract code and code_type from input
+    const code = input?.code || null
+    const code_type = input?.codeType || null
+
     // Insert run record into database with proper initial values
     const { error: dbError } = await supabase
       .from('runs')
       .insert({
         id: run.id,
+        code: code,
+        code_type: code_type,
         pct: 0,
         status: 'RUNNING',
         done: 0,
