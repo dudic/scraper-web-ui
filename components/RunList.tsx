@@ -9,6 +9,22 @@ export function RunList() {
   const [modalRunId, setModalRunId] = useState<string | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
 
+  // TEMPORARY DEBUG: Log the runs data
+  useEffect(() => {
+    console.log('🔍 RunList Debug - Received runs data:', runs);
+    if (runs.length > 0) {
+      runs.forEach((run, index) => {
+        console.log(`Run ${index + 1}:`, {
+          id: run.id,
+          code: run.code,
+          code_type: run.code_type,
+          status: run.status,
+          started_at: run.started_at
+        });
+      });
+    }
+  }, [runs]);
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'SUCCEEDED':
