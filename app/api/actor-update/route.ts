@@ -50,7 +50,8 @@ export async function POST(request: NextRequest) {
     
     const supabase = createClient(supabaseUrl, supabaseKey)
 
-    // Find the run record by id (UUID) - the runId from Apify is the internal UUID
+    // CRITICAL: Only use UUID (id field) to identify records - NEVER use Apify run ID
+    console.log('🔍 Looking up run by UUID (id field):', runId)
     const { data: currentRun, error: findError } = await supabase
       .from('runs')
       .select('*')
@@ -58,8 +59,8 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (findError) {
-      console.error('❌ Error finding run by id (UUID):', findError)
-      console.error('🔍 Attempted to find run with runId:', runId)
+      console.error('❌ Error finding run by UUID:', findError)
+      console.error('🔍 Attempted to find run with UUID:', runId)
       console.error('🔍 Error details:', JSON.stringify(findError, null, 2))
       return NextResponse.json(
         { error: 'Run not found in database' },
@@ -131,14 +132,13 @@ export async function POST(request: NextRequest) {
     
     console.log('🔍 Actor Update - Updating progress only:')
     console.log('  UUID:', currentRun.id)
-    console.log('  apify run ID:', runId)
     console.log('  runData:', JSON.stringify(runData, null, 2))
     
     // Update the run record using the UUID
     const { error: dbError } = await supabase
       .from('runs')
       .update(runData)
-      .eq('id', currentRun.id) // Use id (UUID) instead of run_id
+      .eq('id', currentRun.id) // Use id (UUID) to update the record
 
     if (dbError) {
       console.error('❌ Database error:', dbError)
@@ -179,7 +179,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ 
       ok: true, 
       runId: currentRun.id, // Return UUID
-      apifyRunId: runId,    // Return Apify run ID
       pct, 
       status: finalStatus,
       done: finalDone,
