@@ -5,6 +5,8 @@ import { createClient } from '@supabase/supabase-js'
 
 interface RunData {
   id: string
+  code?: string
+  code_type?: string
   pct: number
   status: string
   done?: number

@@ -107,7 +107,7 @@ export async function POST(
     const { data: existingFiles } = await supabase
       .from('files')
       .select('id')
-      .eq('run_id', runId)
+      .eq('run_uuid', runId)
 
     if (existingFiles && existingFiles.length > 0) {
       return NextResponse.json(
@@ -278,7 +278,7 @@ export async function POST(
         const { data: dbFileRecord, error: dbError } = await supabase
           .from('files')
           .insert({
-            run_id: runId,
+            run_uuid: runId,
             apify_key: metadata.apifyKey,
             filename: metadata.filename,
             content_type: metadata.contentType,

@@ -3,6 +3,12 @@ import { createClient } from '@supabase/supabase-js'
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('🔄 === ACTOR UPDATE ROUTE CALLED ===')
+    console.log('📅 Timestamp:', new Date().toISOString())
+    console.log('🔗 Request URL:', request.url)
+    console.log('👤 User Agent:', request.headers.get('user-agent'))
+    console.log('🔑 Authorization:', request.headers.get('authorization') ? 'Present' : 'None')
+    
     // Verify authorization
     const auth = request.headers.get('authorization')?.replace('Bearer ', '')
     const actorSecret = process.env.ACTOR_SECRET
@@ -15,6 +21,13 @@ export async function POST(request: NextRequest) {
     }
 
     const { runId, done, total, status, error } = await request.json()
+    
+    console.log('📥 Received actor update data:')
+    console.log('  runId:', runId)
+    console.log('  done:', done)
+    console.log('  total:', total)
+    console.log('  status:', status)
+    console.log('  error:', error)
 
     if (!runId) {
       return NextResponse.json(
@@ -37,12 +50,26 @@ export async function POST(request: NextRequest) {
     
     const supabase = createClient(supabaseUrl, supabaseKey)
 
-    // Get current run data to preserve existing values
-    const { data: currentRun } = await supabase
+    // CRITICAL: Only use UUID (id field) to identify records - NEVER use Apify run ID
+    console.log('🔍 Looking up run by UUID (id field):', runId)
+    const { data: currentRun, error: findError } = await supabase
       .from('runs')
       .select('*')
-      .eq('id', runId)
+      .eq('id', runId) // Use id (UUID) to find the record
       .single()
+
+    if (findError) {
+      console.error('❌ Error finding run by UUID:', findError)
+      console.error('🔍 Attempted to find run with UUID:', runId)
+      console.error('🔍 Error details:', JSON.stringify(findError, null, 2))
+      return NextResponse.json(
+        { error: 'Run not found in database' },
+        { status: 404 }
+      )
+    }
+
+    console.log('✅ Found run record:', currentRun.id, 'for UUID:', runId)
+    console.log('📋 Current run data:', JSON.stringify(currentRun, null, 2))
 
     // Calculate percentage and determine final status
     let pct = 0
@@ -91,9 +118,8 @@ export async function POST(request: NextRequest) {
       pct = currentRun.pct
     }
 
-    // Prepare data for insert/update
+    // Prepare data for update - only update progress fields, never code/code_type
     const runData: any = {
-      id: runId,
       pct,
       status: finalStatus,
       updated_at: new Date().toISOString(),
@@ -104,18 +130,26 @@ export async function POST(request: NextRequest) {
     if (finalTotal !== undefined) runData.total = finalTotal
     if (error) runData.error = error
     
-    // Try to upsert (insert or update) the run record
+    console.log('🔍 Actor Update - Updating progress only:')
+    console.log('  UUID:', currentRun.id)
+    console.log('  runData:', JSON.stringify(runData, null, 2))
+    
+    // Update the run record using the UUID
     const { error: dbError } = await supabase
       .from('runs')
-      .upsert(runData, { onConflict: 'id' })
+      .update(runData)
+      .eq('id', currentRun.id) // Use id (UUID) to update the record
 
     if (dbError) {
-      console.error('Database error:', dbError)
+      console.error('❌ Database error:', dbError)
       return NextResponse.json(
         { error: 'Failed to update run record', details: dbError.message },
         { status: 500 }
       )
     }
+
+    console.log('✅ Run record updated successfully')
+    console.log('🏁 === ACTOR UPDATE ROUTE COMPLETED ===')
 
     // Trigger file processing if run just completed
     let fileProcessingTriggered = false
@@ -123,9 +157,9 @@ export async function POST(request: NextRequest) {
       try {
         // Trigger file processing asynchronously (don't wait for it)
         const baseUrl = process.env.FRONT_URL?.replace(/\/+$/, '') || 'http://localhost:3000';
-        const fileProcessingUrl = `${baseUrl}/api/files/process/${runId}`;
+        const fileProcessingUrl = `${baseUrl}/api/files/process/${currentRun.id}`;
         
-        console.log(`Triggering file processing for run ${runId} at: ${fileProcessingUrl}`);
+        console.log(`Triggering file processing for run ${currentRun.id} at: ${fileProcessingUrl}`);
         
         fetch(fileProcessingUrl, {
           method: 'POST',
@@ -144,7 +178,7 @@ export async function POST(request: NextRequest) {
     
     return NextResponse.json({ 
       ok: true, 
-      runId, 
+      runId: currentRun.id, // Return UUID
       pct, 
       status: finalStatus,
       done: finalDone,
@@ -152,7 +186,7 @@ export async function POST(request: NextRequest) {
       fileProcessingTriggered
     })
   } catch (error) {
-    console.error('Actor update error:', error)
+    console.error('❌ Actor update error:', error)
     return NextResponse.json(
       { error: 'Failed to process actor update' },
       { status: 500 }
