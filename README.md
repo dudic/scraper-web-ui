@@ -2,6 +2,8 @@
 
 A real-time web scraping dashboard built with Next.js, Supabase, and Apify. This application provides a beautiful interface for starting scraping runs and monitoring their progress in real-time.
 
+**Version**: 2.0.0 - UUID-based Architecture & Enhanced Progress Tracking
+
 ## Features
 
 - 🚀 **Real-time Progress Tracking**: Live progress updates using Supabase Realtime
@@ -39,6 +41,16 @@ A real-time web scraping dashboard built with Next.js, Supabase, and Apify. This
 
 This project currently uses **Legacy Supabase API keys**. See `SUPABASE_LEGACY_NOTES.md` for important details about the current implementation and future migration requirements.
 
+## 🔐 Security Status
+
+**Current Implementation**: Basic authentication for actor endpoints
+- ✅ **Actor Authentication**: Bearer token required for `/api/actor-update` and file processing endpoints
+- ⚠️ **Public Endpoints**: Import and delete endpoints are currently public (see [Security Improvements](./docs/SECURITY_IMPROVEMENTS.md) for enhancement roadmap)
+- ✅ **Database Security**: Row-level security policies configured
+- ✅ **File Security**: Private storage with signed URLs
+
+**Security Enhancements Planned**: See [SECURITY_IMPROVEMENTS.md](./docs/SECURITY_IMPROVEMENTS.md) for detailed security roadmap and implementation plans.
+
 ## Quick Start
 
 ### 1. Clone and Install
@@ -59,6 +71,8 @@ npm install
 3. Enable Realtime for the `runs` table:
    - Go to Database > Replication
    - Enable realtime for the `runs` table
+
+**Migration Status**: All migrations (001-011) are required for the current v2.0.0 implementation. See [CURRENT_SCHEMA.md](./docs/database/CURRENT_SCHEMA.md) for complete database schema documentation.
 
 ### 3. Configure Environment Variables
 
@@ -352,6 +366,11 @@ For detailed implementation information, see:
 - [FILE_STORAGE_FEATURES.md](./FILE_STORAGE_FEATURES.md) - Complete feature documentation
 - [API_ENDPOINTS.md](./API_ENDPOINTS.md) - API reference
 - [IMPLEMENTATION_ROADMAP.md](./IMPLEMENTATION_ROADMAP.md) - Development roadmap
+
+**Additional Documentation**:
+- [🔐 Security Improvements](./docs/SECURITY_IMPROVEMENTS.md) - Security roadmap and implementation plans
+- [📁 File Storage Features](./docs/development/FILE_STORAGE_FEATURES.md) - Detailed file management documentation
+- [🗺️ Implementation Roadmap](./docs/development/IMPLEMENTATION_ROADMAP.md) - Development planning and timelines
 
 ## Contributing
 
