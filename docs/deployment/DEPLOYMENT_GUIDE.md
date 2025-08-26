@@ -2,7 +2,7 @@
 
 ## 📋 Overview
 
-This guide provides step-by-step instructions for deploying the Scraper Dashboard with file storage features to production environments.
+This guide provides step-by-step instructions for deploying the Scraper Dashboard with the current UUID-based implementation to production environments.
 
 ## 🏗️ Prerequisites
 
@@ -10,11 +10,14 @@ This guide provides step-by-step instructions for deploying the Scraper Dashboar
 - [Vercel](https://vercel.com) - Hosting platform
 - [Supabase](https://supabase.com) - Database and storage
 - [APIFY](https://apify.com) - Web scraping platform
+- [GitHub](https://github.com) - Version control and Apify integration
 
 ### Required Tools
 - [Git](https://git-scm.com) - Version control
 - [Node.js](https://nodejs.org) (v18+) - Runtime environment
 - [npm](https://npmjs.com) or [yarn](https://yarnpkg.com) - Package manager
+- [Apify CLI](https://docs.apify.com/cli) - Apify management
+- [Vercel CLI](https://vercel.com/docs/cli) - Vercel deployment
 
 ## 🔧 Environment Setup
 
@@ -30,26 +33,31 @@ This guide provides step-by-step instructions for deploying the Scraper Dashboar
 
 #### Database Configuration
 1. Go to SQL Editor in Supabase dashboard
-2. Run the initial migration:
+2. Run the migrations in order:
 
 ```sql
--- Create runs table
+-- Migration 001: Create runs table
 CREATE TABLE runs (
-  id         TEXT PRIMARY KEY,
-  pct        INTEGER NOT NULL DEFAULT 0,
-  status     TEXT NOT NULL DEFAULT 'RUNNING',
-  done       INTEGER DEFAULT 0,
-  total      INTEGER DEFAULT 0,
-  error      TEXT,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  apify_run_id TEXT,
+  code TEXT,
+  code_type TEXT,
+  pct INTEGER DEFAULT 0,
+  status TEXT DEFAULT 'STARTING',
+  done INTEGER DEFAULT 0,
+  total INTEGER DEFAULT 0,
+  error TEXT,
+  description TEXT,
   file_count INTEGER DEFAULT 0,
   started_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Create files table
+-- Migration 002: Create files table
 CREATE TABLE files (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+  run_id TEXT,
+  run_uuid UUID,
   apify_key TEXT NOT NULL,
   filename TEXT NOT NULL,
   content_type TEXT NOT NULL,
@@ -60,10 +68,18 @@ CREATE TABLE files (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Add foreign key constraint
+ALTER TABLE files 
+ADD CONSTRAINT files_run_uuid_fkey 
+FOREIGN KEY (run_uuid) REFERENCES runs(id) ON DELETE CASCADE;
+
 -- Create indexes
 CREATE INDEX idx_runs_started_at ON runs(started_at DESC);
 CREATE INDEX idx_runs_status ON runs(status);
-CREATE INDEX idx_files_run_id ON files(run_id);
+CREATE INDEX idx_runs_code ON runs(code);
+CREATE INDEX idx_runs_code_type ON runs(code_type);
+CREATE INDEX idx_runs_description ON runs(description);
+CREATE INDEX idx_files_run_uuid ON files(run_uuid);
 CREATE INDEX idx_files_created_at ON files(created_at DESC);
 CREATE INDEX idx_files_content_type ON files(content_type);
 
@@ -120,6 +136,27 @@ CREATE POLICY "Service role full access" ON storage.objects
 2. Add environment variables:
    - `ACTOR_SECRET`: Your shared secret for authentication
    - `FRONT_URL`: Your Vercel app URL
+   - `HR_COCKPIT_USER`: HR Cockpit username
+   - `HR_COCKPIT_PASSWORD`: HR Cockpit password
+   - `PROFILING_VALUES_USER`: Profiling Values username
+   - `PROFILING_VALUES_PASSWORD`: Profiling Values password
+
+#### Set Apify Secrets
+```bash
+# Install Apify CLI
+npm install -g apify-cli
+
+# Login to Apify
+apify login
+
+# Set secrets
+apify secrets add ACTOR_SECRET "your-shared-secret"
+apify secrets add FRONT_URL "https://your-app.vercel.app"
+apify secrets add HR_COCKPIT_USER "your-username"
+apify secrets add HR_COCKPIT_PASSWORD "your-password"
+apify secrets add PROFILING_VALUES_USER "your-username"
+apify secrets add PROFILING_VALUES_PASSWORD "your-password"
+```
 
 ### 3. Vercel Project Setup
 
@@ -182,11 +219,34 @@ npm run dev
 ### Step 2: Database Migration
 
 ```bash
-# Run database migrations
-# (This is done through Supabase dashboard SQL editor)
+# Apply database migrations using Supabase CLI
+supabase db push
+
+# Or manually run migrations in Supabase dashboard SQL editor
 ```
 
-### Step 3: Deploy to Vercel
+### Step 3: Deploy Apify Actor
+
+```bash
+# Navigate to actor directory
+cd unified-scraper-actor
+
+# Initialize Git repository (if not already done)
+git init
+git add .
+git commit -m "Initial commit: Unified scraper actor"
+
+# Add GitHub remote
+git remote add origin https://github.com/dudic/unified-scraper-actor.git
+
+# Push to GitHub
+git push -u origin main
+
+# Set GitHub default branch to main
+gh repo edit --default-branch main
+```
+
+### Step 4: Deploy Web UI to Vercel
 
 ```bash
 # Install Vercel CLI
@@ -199,7 +259,7 @@ vercel login
 vercel --prod
 ```
 
-### Step 4: Configure Domain (Optional)
+### Step 5: Configure Domain (Optional)
 
 1. Go to Vercel dashboard
 2. Select your project
@@ -243,6 +303,10 @@ curl -X POST "https://your-app.vercel.app/api/import" \
 | `APIFY_TOKEN` | APIFY API token | Yes | - |
 | `ACTOR_SECRET` | Shared secret for actors | Yes | - |
 | `FRONT_URL` | Vercel app URL | Yes | - |
+| `HR_COCKPIT_USER` | HR Cockpit username | Yes | - |
+| `HR_COCKPIT_PASSWORD` | HR Cockpit password | Yes | - |
+| `PROFILING_VALUES_USER` | Profiling Values username | Yes | - |
+| `PROFILING_VALUES_PASSWORD` | Profiling Values password | Yes | - |
 | `FILE_PROCESSING_TIMEOUT` | File processing timeout (ms) | No | 300000 |
 | `MAX_CONCURRENT_DOWNLOADS` | Max concurrent downloads | No | 5 |
 | `SIGNED_URL_EXPIRY` | Signed URL expiry (seconds) | No | 3600 |
@@ -253,7 +317,7 @@ curl -X POST "https://your-app.vercel.app/api/import" \
 - **Name**: `scraper-files`
 - **Public**: `false`
 - **File Size Limit**: `100MB`
-- **Allowed MIME Types**: PDF, CSV, JSON, XLSX, DOCX
+- **Allowed MIME Types**: PDF, CSV, JSON, XLSX, DOCX, PPTX, TXT, XML, HTML
 
 #### Database Settings
 - **Connection Pooling**: Enabled
@@ -337,6 +401,12 @@ curl -H "Authorization: Bearer your-apify-token" \
   "https://api.apify.com/v2/users/me"
 ```
 
+#### UUID Issues
+```bash
+# Verify UUID format in database
+SELECT id, apify_run_id FROM runs LIMIT 5;
+```
+
 ### Debug Commands
 
 #### Check Environment Variables
@@ -413,5 +483,5 @@ vercel --prod
 ---
 
 **Last Updated**: January 2025  
-**Version**: 1.0.0  
-**Status**: Planning Phase
+**Version**: 2.0.0  
+**Status**: Current Implementation

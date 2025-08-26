@@ -20,13 +20,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { runId, done, total, status, error } = await request.json()
+    const { runId, done, total, status, error, description } = await request.json()
     
     console.log('📥 Received actor update data:')
     console.log('  runId:', runId)
     console.log('  done:', done)
     console.log('  total:', total)
     console.log('  status:', status)
+    console.log('  description:', description)
     console.log('  error:', error)
 
     if (!runId) {
@@ -129,6 +130,7 @@ export async function POST(request: NextRequest) {
     if (finalDone !== undefined) runData.done = finalDone
     if (finalTotal !== undefined) runData.total = finalTotal
     if (error) runData.error = error
+    if (description) runData.description = description
     
     console.log('🔍 Actor Update - Updating progress only:')
     console.log('  UUID:', currentRun.id)

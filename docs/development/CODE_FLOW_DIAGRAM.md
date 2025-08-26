@@ -49,25 +49,43 @@
 │    │ const { actorId, input } = await request.json()                     │ │
 │    │ // input = { code: "ABC123", codeType: "HR_COCKPIT" }              │ │
 │    │                                                                     │ │
-│    │ // 2. Start Apify run                                               │ │
-│    │ run = await client.actor(actorId).call(input)                      │ │
-│    │ // run.id = "abc123def456"                                         │ │
-│    │                                                                     │ │
-│    │ // 3. Extract code values                                          │ │
+│    │ // 2. Extract code values                                          │ │
 │    │ const code = input?.code || null        // "ABC123"                │ │
 │    │ const code_type = input?.codeType || null // "HR_COCKPIT"          │ │
 │    │                                                                     │ │
-│    │ // 4. Insert into database                                          │ │
+│    │ // 3. Create database record with auto-generated UUID              │ │
 │    │ const runData = {                                                   │ │
-│    │   id: run.id,                                                       │ │
-│    │   code: code,                    // "ABC123"                       │ │
-│    │   code_type: code_type,          // "HR_COCKPIT"                   │ │
-│    │   pct: 0,                                                        │ │
-│    │   status: 'RUNNING',                                             │ │
-│    │   // ... other fields                                             │ │
+│    │   // id: NOT specified - Supabase auto-generates UUID              │ │
+│    │   apify_run_id: null,              // Will be updated after Apify  │ │
+│    │   code: code,                      // "ABC123"                     │ │
+│    │   code_type: code_type,            // "HR_COCKPIT"                 │ │
+│    │   pct: 0,                                                          │ │
+│    │   status: 'STARTING',                                              │ │
+│    │   description: 'Initializing...',                                  │ │
+│    │   // ... other fields                                              │ │
 │    │ }                                                                  │ │
 │    │                                                                     │ │
-│    │ await supabase.from('runs').insert(runData)                       │ │
+│    │ const { data: insertedData } = await supabase                      │ │
+│    │   .from('runs')                                                    │ │
+│    │   .insert(runData)                                                 │ │
+│    │   .select('id')  // Get the auto-generated UUID                    │ │
+│    │                                                                     │ │
+│    │ const runId = insertedData[0].id  // UUID like "550e8400-e29b..."  │ │
+│    │                                                                     │ │
+│    │ // 4. Start Apify run with UUID                                    │ │
+│    │ const apifyInput = {                                               │ │
+│    │   ...input,                                                        │ │
+│    │   internalRunId: runId  // Pass UUID to Apify                     │ │
+│    │ }                                                                  │ │
+│    │                                                                     │ │
+│    │ run = await client.actor(actorId).call(apifyInput)                │ │
+│    │ // run.id = "abc123def456" (Apify run ID)                         │ │
+│    │                                                                     │ │
+│    │ // 5. Update record with Apify run ID                              │ │
+│    │ await supabase                                                     │ │
+│    │   .from('runs')                                                    │ │
+│    │   .update({ apify_run_id: run.id })                               │ │
+│    │   .eq('id', runId)  // Use UUID for identification                │ │
 │    └─────────────────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
@@ -76,37 +94,87 @@
 │ 4. Database Storage (Supabase)                                             │
 │                                                                             │
 │    ┌─────────────────────────────────────────────────────────────────────┐ │
-│    │ INSERT INTO runs (id, code, code_type, pct, status, ...)           │ │
-│    │ VALUES ('abc123def456', 'ABC123', 'HR_COCKPIT', 0, 'RUNNING', ...) │ │
+│    │ INSERT INTO runs (id, apify_run_id, code, code_type, ...)         │ │
+│    │ VALUES (gen_random_uuid(), NULL, 'ABC123', 'HR_COCKPIT', ...)     │ │
 │    │                                                                     │ │
 │    │ Result: New row in 'runs' table with:                              │ │
-│    │ - id: 'abc123def456'                                               │ │
+│    │ - id: '550e8400-e29b-41d4-a716-446655440000' (UUID)               │ │
+│    │ - apify_run_id: NULL (initially)                                  │ │
 │    │ - code: 'ABC123'                                                   │ │
 │    │ - code_type: 'HR_COCKPIT'                                          │ │
-│    │ - status: 'RUNNING'                                                │ │
+│    │ - status: 'STARTING'                                               │ │
+│    │                                                                     │ │
+│    │ UPDATE runs SET apify_run_id = 'abc123def456'                     │ │
+│    │ WHERE id = '550e8400-e29b-41d4-a716-446655440000'                 │ │
 │    └─────────────────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ 5. Progress Updates (app/api/actor-update/route.ts)                        │
+│ 5. Apify Actor (unified-scraper-actor/src/main.js)                         │
+│                                                                             │
+│    ┌─────────────────────────────────────────────────────────────────────┐ │
+│    │ // 1. Receive input with UUID                                       │ │
+│    │ const { code, codeType, internalRunId } = input;                   │ │
+│    │ const runId = internalRunId;  // UUID from web UI                  │ │
+│    │                                                                     │ │
+│    │ // 2. Send initial progress update                                 │ │
+│    │ await sendProgressUpdate({                                          │ │
+│    │   runId,  // UUID                                                   │ │
+│    │   done: 0,                                                          │ │
+│    │   total: 1,                                                         │ │
+│    │   status: 'STARTING',                                               │ │
+│    │   description: 'Initializing...'                                    │ │
+│    │ });                                                                 │ │
+│    │                                                                     │ │
+│    │ // 3. Execute scraping logic                                        │ │
+│    │ // ... scraping code ...                                           │ │
+│    │                                                                     │ │
+│    │ // 4. Send progress updates with UUID                              │ │
+│    │ await sendProgressUpdate({                                          │ │
+│    │   runId,  // UUID                                                   │ │
+│    │   done: 2,                                                          │ │
+│    │   total: 5,                                                         │ │
+│    │   status: 'RUNNING',                                                │ │
+│    │   description: 'Download Assessment-Report'                         │ │
+│    │ });                                                                 │ │
+│    └─────────────────────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 6. Progress Updates (app/api/actor-update/route.ts)                        │
 │                                                                             │
 │    ┌─────────────────────────────────────────────────────────────────────┐ │
 │    │ // Apify sends progress updates                                    │ │
 │    │ POST /api/actor-update                                             │ │
-│    │ { runId: 'abc123def456', done: 5, total: 10, status: 'RUNNING' }   │ │
-│    │                                                                     │ │
-│    │ // CRITICAL: Preserve existing code values                          │ │
-│    │ const currentRun = await supabase.from('runs').select('*').eq('id', runId).single()
-│    │                                                                     │ │
-│    │ const runData = {                                                   │ │
-│    │   id: runId,                                                        │ │
-│    │   pct: 50,                                                          │ │
-│    │   status: 'RUNNING',                                                │ │
-│    │   code: currentRun.code,           // PRESERVED: "ABC123"          │ │
-│    │   code_type: currentRun.code_type, // PRESERVED: "HR_COCKPIT"      │ │
-│    │   // ... other updated fields                                      │ │
+│    │ {                                                                   │ │
+│    │   runId: "550e8400-e29b-41d4-a716-446655440000",  // UUID          │ │
+│    │   done: 2,                                                          │ │
+│    │   total: 5,                                                         │ │
+│    │   status: "RUNNING",                                                │ │
+│    │   description: "Download Assessment-Report"                         │ │
 │    │ }                                                                   │ │
+│    │                                                                     │ │
+│    │ // CRITICAL: Look up by UUID only                                  │ │
+│    │ const { data: currentRun } = await supabase                        │ │
+│    │   .from('runs')                                                    │ │
+│    │   .select('*')                                                     │ │
+│    │   .eq('id', runId)  // Use UUID for lookup                         │ │
+│    │   .single()                                                        │ │
+│    │                                                                     │ │
+│    │ // Update with new progress data                                   │ │
+│    │ const runData = {                                                  │ │
+│    │   id: runId,                                                       │ │
+│    │   pct: 40,                                                         │ │
+│    │   status: 'RUNNING',                                               │ │
+│    │   done: 2,                                                         │ │
+│    │   total: 5,                                                        │ │
+│    │   description: 'Download Assessment-Report',                       │ │
+│    │   // Preserve existing code and code_type                          │ │
+│    │   code: currentRun.code,           // "ABC123"                     │ │
+│    │   code_type: currentRun.code_type, // "HR_COCKPIT"                 │ │
+│    │ }                                                                  │ │
 │    │                                                                     │ │
 │    │ await supabase.from('runs').upsert(runData, { onConflict: 'id' })  │ │
 │    └─────────────────────────────────────────────────────────────────────┘ │
@@ -114,22 +182,27 @@
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│ 6. Frontend Display (useRunList.ts + RunList.tsx)                          │
+│ 7. Frontend Display (useRunList.ts + RunList.tsx)                          │
 │                                                                             │
 │    ┌─────────────────────────────────────────────────────────────────────┐ │
 │    │ // 1. Fetch data from database                                      │ │
 │    │ const { data } = await supabase                                      │ │
 │    │   .from('runs')                                                      │ │
-│    │   .select('*')  // Includes code, code_type                         │ │
+│    │   .select('*')  // Includes code, code_type, description           │ │
 │    │   .order('started_at', { ascending: false })                        │ │
 │    │                                                                     │ │
 │    │ // 2. Data received:                                                │ │
 │    │ data = [                                                            │ │
 │    │   {                                                                 │ │
-│    │     id: 'abc123def456',                                            │ │
+│    │     id: '550e8400-e29b-41d4-a716-446655440000',                    │ │
+│    │     apify_run_id: 'abc123def456',                                  │ │
 │    │     code: 'ABC123',                                                │ │
 │    │     code_type: 'HR_COCKPIT',                                       │ │
 │    │     status: 'RUNNING',                                             │ │
+│    │     description: 'Download Assessment-Report',                     │ │
+│    │     pct: 40,                                                       │ │
+│    │     done: 2,                                                       │ │
+│    │     total: 5,                                                      │ │
 │    │     // ... other fields                                            │ │
 │    │   }                                                                │ │
 │    │ ]                                                                   │ │
@@ -137,6 +210,8 @@
 │    │ // 3. Display in table                                              │ │
 │    │ <td>{run.code || '-'}</td>         // Shows: "ABC123"              │ │
 │    │ <td>{run.code_type || '-'}</td>    // Shows: "HR_COCKPIT"          │ │
+│    │ <td>{run.description || '-'}</td>  // Shows: "Download Assessment-Report" │
+│    │ <td>{run.pct}%</td>                // Shows: "40%"                 │ │
 │    └─────────────────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -165,6 +240,7 @@ console.log('Request body:', JSON.stringify({
 console.log('API received input:', input);
 console.log('Extracted code:', code);
 console.log('Extracted code_type:', code_type);
+console.log('Auto-generated UUID:', runId);
 ```
 
 ### **Point 4: Database Insert**
@@ -172,15 +248,32 @@ console.log('Extracted code_type:', code_type);
 // Check what's inserted into database
 console.log('Data to insert:', runData);
 console.log('Insert result:', insertedData);
+console.log('Generated UUID:', runId);
 ```
 
-### **Point 5: Database Query**
+### **Point 5: Apify Integration**
+```javascript
+// Check what's sent to Apify
+console.log('Apify input:', apifyInput);
+console.log('UUID passed to Apify:', internalRunId);
+```
+
+### **Point 6: Progress Updates**
+```javascript
+// Check progress update data
+console.log('Progress update received:', {
+  runId, done, total, status, description
+});
+console.log('UUID used for lookup:', runId);
+```
+
+### **Point 7: Database Query**
 ```javascript
 // Check what's retrieved from database
 console.log('Database query result:', data);
 ```
 
-### **Point 6: Frontend Display**
+### **Point 8: Frontend Display**
 ```javascript
 // Check what frontend receives
 console.log('Frontend received runs:', runs);
@@ -192,9 +285,11 @@ console.log('Frontend received runs:', runs);
 2. **API Request**: Network error or malformed request
 3. **API Processing**: Code extraction fails
 4. **Database Insert**: Database error or constraint violation
-5. **Progress Updates**: Code values overwritten during updates
-6. **Database Query**: Query doesn't include code columns
-7. **Frontend Display**: Component doesn't render code values
+5. **UUID Generation**: Supabase UUID generation fails
+6. **Apify Integration**: Apify API call fails
+7. **Progress Updates**: UUID mismatch or database lookup fails
+8. **Database Query**: Query doesn't include required columns
+9. **Frontend Display**: Component doesn't render data correctly
 
 ## 🔧 **Quick Test**
 
@@ -209,4 +304,33 @@ console.log('🔍 DEBUG - About to send:', {
 ```
 
 This will show you exactly what data is being sent to the API.
+
+## 🚨 **Critical UUID Rules**
+
+### ✅ **Correct Usage**
+- **Always use Supabase UUID** (`id` field) for database operations
+- **Pass UUID as `internalRunId`** to Apify actors
+- **Use UUID for all progress updates**
+- **Use UUID for file processing**
+
+### ❌ **Forbidden Usage**
+- **Never use Apify run ID** for database lookups
+- **Never use Apify run ID** for database updates
+- **Never mix UUID and Apify run ID** in the same operation
+- **Never use `process.env.APIFY_ACTOR_RUN_ID`** for database operations
+
+## 📊 **Data Flow Summary**
+
+1. **Frontend** → User input captured
+2. **Import API** → Creates record with auto-generated UUID
+3. **Database** → Stores record with UUID and code values
+4. **Apify** → Receives UUID and executes scraping
+5. **Progress Updates** → Use UUID for all database operations
+6. **Frontend** → Displays data using UUID-based queries
+
+---
+
+**Last Updated**: January 2025  
+**Version**: 2.0.0  
+**Status**: Current Implementation
 

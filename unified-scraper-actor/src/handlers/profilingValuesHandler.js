@@ -24,6 +24,21 @@ export async function handleProfilingValues({ page, crawler, log }) {
     currentStep++;
     logStep({ step: "Login to Profiling Values", current: currentStep, total: totalSteps, log });
     
+    // Send progress update for login step
+    if (runId) {
+      try {
+        await sendProgressUpdate({
+          runId,
+          done: currentStep,
+          total: totalSteps,
+          description: "Login to Profiling Values",
+          log
+        });
+      } catch (progressError) {
+        log.info(`Progress update failed (non-critical): ${progressError.message}`);
+      }
+    }
+    
     const user = process.env[config.envCredentials.user];
     const password = process.env[config.envCredentials.password];
     
@@ -40,6 +55,21 @@ export async function handleProfilingValues({ page, crawler, log }) {
     currentStep++;
     logStep({ step: "Search for code", current: currentStep, total: totalSteps, log });
     
+    // Send progress update for search step
+    if (runId) {
+      try {
+        await sendProgressUpdate({
+          runId,
+          done: currentStep,
+          total: totalSteps,
+          description: "Search for code",
+          log
+        });
+      } catch (progressError) {
+        log.info(`Progress update failed (non-critical): ${progressError.message}`);
+      }
+    }
+    
     await page.locator("input[name=filter_text]").waitFor({ state: "visible", timeout: 60000 });
     await page.locator("input[name=filter_text]").clear();
     await page.locator("input[name=filter_text]").fill(code);
@@ -49,12 +79,42 @@ export async function handleProfilingValues({ page, crawler, log }) {
     currentStep++;
     logStep({ step: "Navigate to reports", current: currentStep, total: totalSteps, log });
     
+    // Send progress update for navigation step
+    if (runId) {
+      try {
+        await sendProgressUpdate({
+          runId,
+          done: currentStep,
+          total: totalSteps,
+          description: "Navigate to reports",
+          log
+        });
+      } catch (progressError) {
+        log.info(`Progress update failed (non-critical): ${progressError.message}`);
+      }
+    }
+    
     await page.locator(`td:has-text("${code}")`).waitFor({ timeout: 60000 });
     await page.locator(`tr:has-text("${code}") i[title=PDF-Report]`).click();
     
     // STEP 4: Wait for report box and get all report buttons
     currentStep++;
     logStep({ step: "Get available reports", current: currentStep, total: totalSteps, log });
+    
+    // Send progress update for getting reports step
+    if (runId) {
+      try {
+        await sendProgressUpdate({
+          runId,
+          done: currentStep,
+          total: totalSteps,
+          description: "Get available reports",
+          log
+        });
+      } catch (progressError) {
+        log.info(`Progress update failed (non-critical): ${progressError.message}`);
+      }
+    }
     
     await page.locator("#report_box").waitFor({ state: "visible", timeout: 60000 });
     
@@ -99,6 +159,7 @@ export async function handleProfilingValues({ page, crawler, log }) {
             runId,
             done: currentStep,
             total: totalSteps,
+            description: `Download ${buttonText}`,
             log
           });
         }
@@ -113,6 +174,21 @@ export async function handleProfilingValues({ page, crawler, log }) {
     currentStep++;
     logStep({ step: "Save results to dataset", current: currentStep, total: totalSteps, log });
     
+    // Send progress update for save step
+    if (runId) {
+      try {
+        await sendProgressUpdate({
+          runId,
+          done: currentStep,
+          total: totalSteps,
+          description: "Save results to dataset",
+          log
+        });
+      } catch (progressError) {
+        log.info(`Progress update failed (non-critical): ${progressError.message}`);
+      }
+    }
+    
     await Dataset.pushData(result);
     
     // Send final progress update
@@ -122,6 +198,7 @@ export async function handleProfilingValues({ page, crawler, log }) {
         done: totalSteps,
         total: totalSteps,
         status: 'COMPLETED',
+        description: 'Completed',
         log
       });
     }
@@ -196,9 +273,51 @@ async function downloadAndUpload(button, page, log) {
   log.info(`Downloading file: ${fileName}`);
   
   await download.saveAs(fileName);
-  const contentType = fileName.endsWith("csv")
-    ? "text/csv"
-    : "application/pdf";
+  // Better content type detection based on file extension
+  let contentType = "application/octet-stream";
+  const extension = fileName.toLowerCase().split('.').pop();
+  
+  switch (extension) {
+    case 'csv':
+      contentType = "text/csv";
+      break;
+    case 'pdf':
+      contentType = "application/pdf";
+      break;
+    case 'pptx':
+      contentType = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+      break;
+    case 'ppt':
+      contentType = "application/vnd.ms-powerpoint";
+      break;
+    case 'xlsx':
+      contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+      break;
+    case 'xls':
+      contentType = "application/vnd.ms-excel";
+      break;
+    case 'docx':
+      contentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+      break;
+    case 'doc':
+      contentType = "application/msword";
+      break;
+    case 'json':
+      contentType = "application/json";
+      break;
+    case 'txt':
+      contentType = "text/plain";
+      break;
+    case 'xml':
+      contentType = "application/xml";
+      break;
+    case 'html':
+    case 'htm':
+      contentType = "text/html";
+      break;
+    default:
+      contentType = "application/octet-stream";
+  }
   
   log.info(`Reading file: ${fileName}`);
   const buffer = await fs.readFile(fileName);

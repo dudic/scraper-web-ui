@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { ApifyClient } from 'apify-client'
+import { detectFileType } from '@/app/utils/fileTypeDetection'
 
 // Types for file processing
 interface FileMetadata {
@@ -149,16 +150,40 @@ export async function POST(
           fileBuffer = Buffer.from(String(fileRecord.value))
         }
 
+        // Detect proper file type based on content and filename
+        const fileTypeInfo = detectFileType(metadata.filename, fileBuffer)
+        const detectedContentType = fileTypeInfo.mimeType
+        
+        console.log(`🔍 File type detection for ${metadata.filename}:`)
+        console.log(`  📁 Extension: ${fileTypeInfo.extension}`)
+        console.log(`  🏷️  Original content type: ${metadata.contentType}`)
+        console.log(`  ✅ Detected content type: ${detectedContentType}`)
+        console.log(`  📝 Is text: ${fileTypeInfo.isText}`)
+        console.log(`  💾 Is binary: ${fileTypeInfo.isBinary}`)
+        
+        // Log specific detection for key file types
+        if (detectedContentType === 'application/pdf') {
+          console.log(`  📄 Detected as PDF file`)
+        } else if (detectedContentType === 'text/csv') {
+          console.log(`  📊 Detected as CSV file`)
+        } else if (detectedContentType.includes('presentation')) {
+          console.log(`  📽️  Detected as PowerPoint file`)
+        } else if (detectedContentType === 'text/plain') {
+          console.log(`  📄 Detected as plain text file`)
+        } else if (detectedContentType === 'application/json') {
+          console.log(`  📋 Detected as JSON file`)
+        }
+
         // Generate unique filename for Supabase Storage
         const timestamp = Date.now()
         const safeFilename = metadata.filename.replace(/[^a-zA-Z0-9.-]/g, '_')
         const supabasePath = `${runId}/${timestamp}_${safeFilename}`
 
-        // Upload to Supabase Storage
+        // Upload to Supabase Storage with detected content type
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from('scraper-files')
           .upload(supabasePath, fileBuffer, {
-            contentType: metadata.contentType,
+            contentType: detectedContentType,
             upsert: false
           })
 
@@ -178,14 +203,14 @@ export async function POST(
           continue
         }
 
-        // Insert file metadata into database
+        // Insert file metadata into database with detected content type
         const { data: dbFileRecord, error: dbError } = await supabase
           .from('files')
           .insert({
             run_uuid: runId,
             apify_key: metadata.apifyKey,
             filename: metadata.filename,
-            content_type: metadata.contentType,
+            content_type: detectedContentType,
             file_size: fileBuffer.length,
             supabase_path: supabasePath,
             download_url: urlData.signedUrl

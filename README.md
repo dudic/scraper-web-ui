@@ -1,16 +1,19 @@
 # Scraper Dashboard
 
-A real-time web scraping dashboard built with Next.js, Supabase, and Apify. This application provides a beautiful interface for starting scraping runs and monitoring their progress in real-time.
+A real-time web scraping dashboard built with Next.js, Supabase, and Apify. This application provides a beautiful interface for starting scraping runs and monitoring their progress in real-time with comprehensive file management capabilities.
 
 ## Features
 
 - 🚀 **Real-time Progress Tracking**: Live progress updates using Supabase Realtime
 - 🎨 **Modern UI**: Beautiful, responsive design with dark mode support
-- 📊 **Run History**: Complete history of all scraping runs
-- 📁 **File Storage & Downloads**: Secure file storage with easy download access
+- 📊 **Run History**: Complete history of all scraping runs with UUID-based identification
+- 📁 **File Storage & Downloads**: Secure file storage with automatic content type detection
 - 🔐 **Secure**: API authentication for actor callbacks
 - ☁️ **Serverless**: Built for Vercel deployment
 - 📱 **Responsive**: Works on desktop and mobile devices
+- 🗑️ **Run Management**: Delete runs and associated files
+- 📋 **Progress Descriptions**: Real-time step descriptions from APIFY actors
+- 🎯 **File Type Detection**: Automatic detection of PDF, CSV, JSON, Office documents
 
 ## Architecture
 
@@ -26,18 +29,19 @@ A real-time web scraping dashboard built with Next.js, Supabase, and Apify. This
 │    (Serverless)         │                                │    Realtime        │
 │   • import              │                                │    Storage bucket  │
 │   • actor-update        │                                └─────────┬──────────┘
-└─────────┬───────────────┘                                          │ signed URLs
-          │ start run / receive progress                            ▼
-          ▼                                                ┌────────────────────┐
-┌─────────────────────────┐  POST /api/actor-update        │ 5️⃣ Files in bucket│
-│ 4️⃣ Apify Actor run     │  {runId, done, total}          │    docs/run-id/*   │
-│    (scraper container)  │                                └────────────────────┘
+│   • file processing     │                                          │ signed URLs
+└─────────┬───────────────┘                                          ▼
+          │ start run / receive progress                ┌────────────────────┐
+          ▼                                            │ 5️⃣ Files in bucket│
+┌─────────────────────────┐  POST /api/actor-update    │    docs/run-id/*   │
+│ 4️⃣ Apify Actor run     │  {UUID, done, total, desc} │                   │
+│    (scraper container)  │                            └────────────────────┘
 └─────────────────────────┘
 ```
 
-## ⚠️ **Important Note: Legacy Supabase API**
+## ⚠️ **Important Note: UUID-Based Implementation**
 
-This project currently uses **Legacy Supabase API keys**. See `SUPABASE_LEGACY_NOTES.md` for important details about the current implementation and future migration requirements.
+This project uses **Supabase-generated UUIDs** for all database operations. The Apify run ID is stored for reference only. See [UUID_IDENTIFICATION_GUIDE.md](./docs/development/UUID_IDENTIFICATION_GUIDE.md) for critical implementation details.
 
 ## Quick Start
 
@@ -52,13 +56,14 @@ npm install
 ### 2. Set up Supabase
 
 1. Create a new Supabase project at [supabase.com](https://supabase.com)
-2. Go to SQL Editor and run the migration:
+2. Go to SQL Editor and run the migrations in order:
    ```sql
-   -- Copy the contents of supabase/migrations/001_create_runs_table.sql
+   -- Run migrations 001-011 from supabase/migrations/
+   -- See docs/database/CURRENT_SCHEMA.md for current schema
    ```
-3. Enable Realtime for the `runs` table:
+3. Enable Realtime for the `runs` and `files` tables:
    - Go to Database > Replication
-   - Enable realtime for the `runs` table
+   - Enable realtime for both tables
 
 ### 3. Configure Environment Variables
 
@@ -104,6 +109,10 @@ Open [http://localhost:3000](http://localhost:3000) to see the application.
 In your Apify actor, add these environment variables:
 - `ACTOR_SECRET`: Same value as in your Vercel environment
 - `FRONT_URL`: Your Vercel app URL
+- `HR_COCKPIT_USER`: HR Cockpit username
+- `HR_COCKPIT_PASSWORD`: HR Cockpit password
+- `PROFILING_VALUES_USER`: Profiling Values username
+- `PROFILING_VALUES_PASSWORD`: Profiling Values password
 
 Add this code to your actor to send progress updates:
 
@@ -116,10 +125,11 @@ await fetch(`${process.env.FRONT_URL}/api/actor-update`, {
     Authorization: `Bearer ${process.env.ACTOR_SECRET}`,
   },
   body: JSON.stringify({ 
-    runId: process.env.APIFY_ACTOR_RUN_ID, 
+    runId: internalRunId, // Supabase UUID, not Apify run ID
     done: processedCount, 
     total: totalCount,
-    status: 'RUNNING'
+    status: 'RUNNING',
+    description: 'Current step description'
   }),
 });
 
@@ -131,10 +141,11 @@ await fetch(`${process.env.FRONT_URL}/api/actor-update`, {
     Authorization: `Bearer ${process.env.ACTOR_SECRET}`,
   },
   body: JSON.stringify({ 
-    runId: process.env.APIFY_ACTOR_RUN_ID, 
+    runId: internalRunId, // Supabase UUID
     done: totalCount, 
     total: totalCount,
-    status: 'COMPLETED'
+    status: 'SUCCEEDED',
+    description: 'Completed'
   }),
 });
 
@@ -146,7 +157,7 @@ await fetch(`${process.env.FRONT_URL}/api/actor-update`, {
     Authorization: `Bearer ${process.env.ACTOR_SECRET}`,
   },
   body: JSON.stringify({ 
-    runId: process.env.APIFY_ACTOR_RUN_ID, 
+    runId: internalRunId, // Supabase UUID
     status: 'FAILED',
     error: errorMessage
   }),
@@ -161,9 +172,10 @@ Starts a new scraping run.
 **Request:**
 ```json
 {
-  "actorId": "your-actor-id",
+  "actorId": "HceSv1pj0Y3PZTMvG",
   "input": {
-    "startUrls": ["https://example.com"]
+    "code": "ABC123",
+    "codeType": "HR_COCKPIT"
   }
 }
 ```
@@ -171,7 +183,7 @@ Starts a new scraping run.
 **Response:**
 ```json
 {
-  "runId": "abc123"
+  "runId": "550e8400-e29b-41d4-a716-446655440000"
 }
 ```
 
@@ -186,10 +198,11 @@ Authorization: Bearer your-actor-secret
 **Request:**
 ```json
 {
-  "runId": "abc123",
+  "runId": "550e8400-e29b-41d4-a716-446655440000",
   "done": 5,
   "total": 10,
   "status": "RUNNING",
+  "description": "Download Assessment-Report",
   "error": "Error message (optional)"
 }
 ```
@@ -197,8 +210,20 @@ Authorization: Bearer your-actor-secret
 **Supported Status Values:**
 - `STARTING` - Actor is starting up
 - `RUNNING` - Actor is processing
-- `COMPLETED` - Actor finished successfully (auto-converted to SUCCEEDED)
+- `SUCCEEDED` - Actor finished successfully
 - `FAILED` - Actor encountered an error
+
+### DELETE /api/runs/{runId}
+Deletes a run and all associated files.
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Run and associated files deleted successfully",
+  "deletedFiles": 3
+}
+```
 
 ### File Management Endpoints
 
@@ -228,7 +253,7 @@ Lists all files for a specific run.
 {
   "files": [
     {
-      "id": "uuid",
+      "id": "550e8400-e29b-41d4-a716-446655440001",
       "filename": "report.pdf",
       "contentType": "application/pdf",
       "fileSize": 1024000,
@@ -255,13 +280,17 @@ Generates a signed download URL for a specific file.
 ### Runs Table
 ```sql
 CREATE TABLE runs (
-  id         TEXT PRIMARY KEY,      -- Apify runId
-  pct        INTEGER NOT NULL DEFAULT 0,
-  status     TEXT NOT NULL DEFAULT 'RUNNING',
-  done       INTEGER DEFAULT 0,     -- Number of completed items
-  total      INTEGER DEFAULT 0,     -- Total number of items
-  error      TEXT,                  -- Error message if failed
-  file_count INTEGER DEFAULT 0,     -- Number of files associated with run
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  apify_run_id TEXT,
+  code TEXT,
+  code_type TEXT,
+  pct INTEGER DEFAULT 0,
+  status TEXT DEFAULT 'STARTING',
+  done INTEGER DEFAULT 0,
+  total INTEGER DEFAULT 0,
+  error TEXT,
+  description TEXT,
+  file_count INTEGER DEFAULT 0,
   started_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -271,13 +300,14 @@ CREATE TABLE runs (
 ```sql
 CREATE TABLE files (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
-  apify_key TEXT NOT NULL,           -- Original APIFY key
-  filename TEXT NOT NULL,            -- Display name
-  content_type TEXT NOT NULL,        -- MIME type
-  file_size BIGINT,                  -- File size in bytes
-  supabase_path TEXT,                -- Path in Supabase storage
-  download_url TEXT,                 -- Signed download URL
+  run_id TEXT,                    -- Legacy column (deprecated)
+  run_uuid UUID,                  -- Current UUID reference
+  apify_key TEXT NOT NULL,
+  filename TEXT NOT NULL,
+  content_type TEXT NOT NULL,
+  file_size BIGINT,
+  supabase_path TEXT,
+  download_url TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -293,29 +323,25 @@ scraper-web-ui/
 │   ├── api/               # API routes
 │   │   ├── files/         # File management endpoints
 │   │   ├── import/        # Import functionality
-│   │   └── actor-update/  # Actor progress updates
+│   │   ├── actor-update/  # Actor progress updates
+│   │   └── runs/          # Run management endpoints
 │   ├── globals.css        # Global styles
 │   ├── layout.tsx         # Root layout
 │   └── page.tsx           # Main page
 ├── components/            # React components
 │   ├── ImportForm.tsx    # Form to start imports
-│   ├── RunProgress.tsx   # Progress display
 │   ├── RunList.tsx       # Run history table
 │   ├── FileList.tsx      # File management UI
-│   └── FileDownload.tsx  # File download component
+│   └── FileDetailsModal.tsx # File details modal
 ├── hooks/                # Custom React hooks
-│   ├── useRunProgress.ts # Real-time progress hook
 │   ├── useRunList.ts     # Run list hook
-│   ├── useFileList.ts    # File list hook
-│   └── useFileDownload.ts # File download hook
+│   └── useFileList.ts    # File list hook
 ├── lib/                  # Utility libraries
-│   ├── apify.ts          # APIFY integration
-│   ├── fileProcessor.ts  # File processing logic
-│   └── supabaseStorage.ts # Supabase storage utilities
-├── types/                # TypeScript type definitions
-│   └── file.ts           # File-related types
+│   └── apify.ts          # APIFY integration
+├── utils/                # Utility functions
+│   └── fileTypeDetection.ts # File type detection
 ├── supabase/             # Database migrations
-└── public/              # Static assets
+└── unified-scraper-actor/ # APIFY actor code
 ```
 
 ### Available Scripts
@@ -331,16 +357,21 @@ The Scraper Dashboard includes comprehensive file storage and download capabilit
 
 ### How It Works
 1. **APIFY Integration**: Files are downloaded from APIFY Key-Value Store
-2. **Secure Storage**: Files are stored in Supabase Storage with private access
-3. **Easy Access**: Users can download files through secure signed URLs
-4. **Real-time Updates**: File processing status is updated in real-time
+2. **Content Type Detection**: Automatic detection of file types (PDF, CSV, JSON, etc.)
+3. **Secure Storage**: Files are stored in Supabase Storage with private access
+4. **Easy Access**: Users can download files through secure signed URLs
+5. **Real-time Updates**: File processing status is updated in real-time
 
 ### File Types Supported
 - PDF documents
 - CSV data files
 - JSON reports
-- Excel spreadsheets
-- Word documents
+- Excel spreadsheets (XLSX, XLS)
+- Word documents (DOCX, DOC)
+- PowerPoint presentations (PPTX, PPT)
+- Plain text files (TXT)
+- XML files
+- HTML files
 
 ### Security Features
 - Private storage bucket
@@ -348,10 +379,17 @@ The Scraper Dashboard includes comprehensive file storage and download capabilit
 - File type validation
 - Size restrictions (100MB max)
 
-For detailed implementation information, see:
-- [FILE_STORAGE_FEATURES.md](./FILE_STORAGE_FEATURES.md) - Complete feature documentation
-- [API_ENDPOINTS.md](./API_ENDPOINTS.md) - API reference
-- [IMPLEMENTATION_ROADMAP.md](./IMPLEMENTATION_ROADMAP.md) - Development roadmap
+## Documentation
+
+For detailed documentation, see the `docs/` directory:
+
+- [📋 Architecture Overview](./docs/ARCHITECTURE_OVERVIEW.md) - System architecture and components
+- [🗄️ Current Database Schema](./docs/database/CURRENT_SCHEMA.md) - Database structure and relationships
+- [🔌 API Endpoints](./docs/api/API_ENDPOINTS.md) - Complete API reference
+- [🚀 Deployment Guide](./docs/deployment/DEPLOYMENT_GUIDE.md) - Deployment instructions
+- [🧪 Testing Guide](./docs/TESTING_GUIDE.md) - Testing procedures and tools
+- [🔄 Code Flow Diagram](./docs/development/CODE_FLOW_DIAGRAM.md) - Data flow and component interactions
+- [🔑 UUID Identification Guide](./docs/development/UUID_IDENTIFICATION_GUIDE.md) - Critical UUID usage guidelines
 
 ## Contributing
 

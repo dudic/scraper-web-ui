@@ -23,6 +23,21 @@ export async function handleHRCockpit({ page, crawler, log }) {
     currentStep++;
     logStep({ step: "Login to HR Cockpit", current: currentStep, total: totalSteps, log });
     
+    // Send progress update for login step
+    if (runId) {
+      try {
+        await sendProgressUpdate({
+          runId,
+          done: currentStep,
+          total: totalSteps,
+          description: "Login to HR Cockpit",
+          log
+        });
+      } catch (progressError) {
+        log.info(`Progress update failed (non-critical): ${progressError.message}`);
+      }
+    }
+    
     const user = process.env[config.envCredentials.user];
     const password = process.env[config.envCredentials.password];
     
@@ -42,6 +57,21 @@ export async function handleHRCockpit({ page, crawler, log }) {
     currentStep++;
     logStep({ step: "Navigate to administration area", current: currentStep, total: totalSteps, log });
     
+    // Send progress update for navigation step
+    if (runId) {
+      try {
+        await sendProgressUpdate({
+          runId,
+          done: currentStep,
+          total: totalSteps,
+          description: "Navigate to administration area",
+          log
+        });
+      } catch (progressError) {
+        log.info(`Progress update failed (non-critical): ${progressError.message}`);
+      }
+    }
+    
     await page.waitForSelector('#nav-menu ul li a:has-text("Gruppen verwalten")');
     await page.click('#nav-menu ul li a:has-text("Gruppen verwalten")');
     log.info("Clicked on 'Gruppen verwalten' successfully");
@@ -51,6 +81,21 @@ export async function handleHRCockpit({ page, crawler, log }) {
     // STEP 3: Navigate to the specific skills profile section
     currentStep++;
     logStep({ step: `Navigate to ${config.navigationPath}`, current: currentStep, total: totalSteps, log });
+    
+    // Send progress update for navigation step
+    if (runId) {
+      try {
+        await sendProgressUpdate({
+          runId,
+          done: currentStep,
+          total: totalSteps,
+          description: `Navigate to ${config.navigationPath}`,
+          log
+        });
+      } catch (progressError) {
+        log.info(`Progress update failed (non-critical): ${progressError.message}`);
+      }
+    }
     
     await page.waitForSelector(`a:has-text("${config.navigationPath}")`);
     await page.click(`a:has-text("${config.navigationPath}")`);
@@ -62,6 +107,21 @@ export async function handleHRCockpit({ page, crawler, log }) {
     currentStep++;
     logStep({ step: "Navigate to completed tests", current: currentStep, total: totalSteps, log });
     
+    // Send progress update for navigation step
+    if (runId) {
+      try {
+        await sendProgressUpdate({
+          runId,
+          done: currentStep,
+          total: totalSteps,
+          description: "Navigate to completed tests",
+          log
+        });
+      } catch (progressError) {
+        log.info(`Progress update failed (non-critical): ${progressError.message}`);
+      }
+    }
+    
     await page.waitForSelector('a:has-text("Abgeschlossene Tests ansehen")');
     await page.click('a:has-text("Abgeschlossene Tests ansehen")');
     log.info("Clicked on 'Abgeschlossene Tests ansehen' successfully");
@@ -71,6 +131,21 @@ export async function handleHRCockpit({ page, crawler, log }) {
     // STEP 5: Find download links for the specified code
     currentStep++;
     logStep({ step: "Find download links", current: currentStep, total: totalSteps, log });
+    
+    // Send progress update for finding links step
+    if (runId) {
+      try {
+        await sendProgressUpdate({
+          runId,
+          done: currentStep,
+          total: totalSteps,
+          description: "Find download links",
+          log
+        });
+      } catch (progressError) {
+        log.info(`Progress update failed (non-critical): ${progressError.message}`);
+      }
+    }
     
     const codeRows = await page.locator(`tr:has-text("${code}")`).all();
     log.info(`Found ${codeRows.length} table rows containing the code: ${code}`);
@@ -114,6 +189,7 @@ export async function handleHRCockpit({ page, crawler, log }) {
                 runId,
                 done: currentStep,
                 total: totalSteps,
+                description: `Download ${fileType}`,
                 log
               });
             } catch (progressError) {
@@ -148,6 +224,7 @@ export async function handleHRCockpit({ page, crawler, log }) {
               runId,
               done: currentStep,
               total: totalSteps,
+              description: "Download CSV evaluation data",
               log
             });
           } catch (progressError) {
@@ -166,6 +243,21 @@ export async function handleHRCockpit({ page, crawler, log }) {
     currentStep++;
     logStep({ step: "Save results to dataset", current: currentStep, total: totalSteps, log });
     
+    // Send progress update for save step
+    if (runId) {
+      try {
+        await sendProgressUpdate({
+          runId,
+          done: currentStep,
+          total: totalSteps,
+          description: "Save results to dataset",
+          log
+        });
+      } catch (progressError) {
+        log.info(`Progress update failed (non-critical): ${progressError.message}`);
+      }
+    }
+    
     await Dataset.pushData(result);
     
     // Send final progress update (non-blocking)
@@ -176,6 +268,7 @@ export async function handleHRCockpit({ page, crawler, log }) {
           done: totalSteps,
           total: totalSteps,
           status: 'COMPLETED',
+          description: 'Completed',
           log
         });
       } catch (progressError) {
@@ -218,9 +311,51 @@ async function downloadWithRetry(page, locator, fileType, log, maxRetries = 3) {
       await download.saveAs(fileName);
       log.info(`Successfully downloaded: ${fileName}`);
       
-      const contentType = fileName.endsWith("pdf")
-        ? "application/pdf"
-        : "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+      // Better content type detection based on file extension
+      let contentType = "application/octet-stream";
+      const extension = fileName.toLowerCase().split('.').pop();
+      
+      switch (extension) {
+        case 'pdf':
+          contentType = "application/pdf";
+          break;
+        case 'pptx':
+          contentType = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+          break;
+        case 'ppt':
+          contentType = "application/vnd.ms-powerpoint";
+          break;
+        case 'docx':
+          contentType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+          break;
+        case 'doc':
+          contentType = "application/msword";
+          break;
+        case 'xlsx':
+          contentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+          break;
+        case 'xls':
+          contentType = "application/vnd.ms-excel";
+          break;
+        case 'csv':
+          contentType = "text/csv";
+          break;
+        case 'json':
+          contentType = "application/json";
+          break;
+        case 'txt':
+          contentType = "text/plain";
+          break;
+        case 'xml':
+          contentType = "application/xml";
+          break;
+        case 'html':
+        case 'htm':
+          contentType = "text/html";
+          break;
+        default:
+          contentType = "application/octet-stream";
+      }
       
       const buffer = await fs.readFile(fileName);
       await KeyValueStore.setValue(fileName, buffer, { contentType });

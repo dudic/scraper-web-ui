@@ -8,6 +8,7 @@ export function RunList() {
   const { runs, isLoading } = useRunList()
   const [modalRunId, setModalRunId] = useState<string | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [deletingRunId, setDeletingRunId] = useState<string | null>(null)
 
   // TEMPORARY DEBUG: Log the runs data
   useEffect(() => {
@@ -48,6 +49,33 @@ export function RunList() {
     setModalRunId(null)
   }
 
+  const handleDeleteRun = async (runId: string) => {
+    if (!confirm('Are you sure you want to delete this run? This action cannot be undone and will also delete all associated files.')) {
+      return
+    }
+
+    setDeletingRunId(runId)
+    
+    try {
+      const response = await fetch(`/api/runs/${runId}`, {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to delete run')
+      }
+
+      // The real-time subscription will automatically update the list
+      console.log('Run deleted successfully')
+    } catch (error) {
+      console.error('Error deleting run:', error)
+      alert(`Failed to delete run: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    } finally {
+      setDeletingRunId(null)
+    }
+  }
+
   if (isLoading) {
     return (
       <div>
@@ -77,6 +105,9 @@ export function RunList() {
           <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
             <thead className="bg-gray-50 dark:bg-gray-800">
               <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-16">
+                  Actions
+                </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-24">
                   Code
                 </th>
@@ -91,6 +122,9 @@ export function RunList() {
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-32">
                   Progress
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-40">
+                  Current Step
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider w-20">
                   Items
@@ -109,6 +143,16 @@ export function RunList() {
             <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
               {runs.map((run) => (
                 <tr key={run.id} className="hover:bg-gray-50 dark:hover:bg-gray-800">
+                  <td className="px-4 py-4 text-sm">
+                    <button
+                      onClick={() => handleDeleteRun(run.id)}
+                      disabled={deletingRunId === run.id}
+                      className="inline-flex items-center px-2 py-1 text-xs font-medium bg-red-100 text-red-800 rounded-full hover:bg-red-200 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/30 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Delete run and all associated files"
+                    >
+                      {deletingRunId === run.id ? '🗑️ Deleting...' : '🗑️ Delete'}
+                    </button>
+                  </td>
                   <td className="px-4 py-4 text-sm text-gray-900 dark:text-white">
                     <span className="truncate block max-w-20">{run.code || '-'}</span>
                   </td>
@@ -135,6 +179,9 @@ export function RunList() {
                         {run.pct}%
                       </span>
                     </div>
+                  </td>
+                  <td className="px-4 py-4 text-sm text-gray-500 dark:text-gray-400">
+                    <span className="truncate block max-w-36">{run.description || '-'}</span>
                   </td>
                   <td className="px-4 py-4 text-sm text-gray-500 dark:text-gray-400">
                     {run.done !== undefined && run.total !== undefined ? `${run.done}/${run.total}` : '-'}

@@ -12,6 +12,7 @@ interface RunData {
   done?: number
   total?: number
   error?: string
+  description?: string
   started_at: string
   updated_at: string
   file_count?: number

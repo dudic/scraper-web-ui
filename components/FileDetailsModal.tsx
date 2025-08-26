@@ -26,11 +26,40 @@ export function FileDetailsModal({ runId, isOpen, onClose }: FileDetailsModalPro
   }
 
   const getFileIcon = (contentType: string): string => {
+    // PDF files
     if (contentType.includes('pdf')) return '📄'
+    
+    // CSV files
+    if (contentType.includes('csv')) return '📊'
+    
+    // JSON files
+    if (contentType.includes('json')) return '📋'
+    
+    // Excel/Spreadsheet files
+    if (contentType.includes('spreadsheet') || contentType.includes('excel') || contentType.includes('xlsx') || contentType.includes('xls')) return '📈'
+    
+    // Word documents
+    if (contentType.includes('word') || contentType.includes('document') || contentType.includes('docx') || contentType.includes('doc')) return '📝'
+    
+    // PowerPoint files
+    if (contentType.includes('presentation') || contentType.includes('powerpoint') || contentType.includes('pptx') || contentType.includes('ppt')) return '📽️'
+    
+    // Image files
     if (contentType.includes('image')) return '🖼️'
-    if (contentType.includes('text')) return '📝'
-    if (contentType.includes('spreadsheet') || contentType.includes('excel')) return '📊'
-    if (contentType.includes('word') || contentType.includes('document')) return '📄'
+    
+    // Text files
+    if (contentType.includes('text/plain') || contentType.includes('txt')) return '📄'
+    
+    // HTML files
+    if (contentType.includes('html')) return '🌐'
+    
+    // XML files
+    if (contentType.includes('xml')) return '📋'
+    
+    // Archive files
+    if (contentType.includes('zip') || contentType.includes('rar') || contentType.includes('7z')) return '📦'
+    
+    // Default folder icon for unknown types
     return '📁'
   }
 

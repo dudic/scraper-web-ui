@@ -23,6 +23,21 @@ export async function handleProfilingValuesSoll({ page, crawler, log }) {
     currentStep++;
     logStep({ step: "Login to Profiling Values", current: currentStep, total: totalSteps, log });
     
+    // Send progress update for login step
+    if (runId) {
+      try {
+        await sendProgressUpdate({
+          runId,
+          done: currentStep,
+          total: totalSteps,
+          description: "Login to Profiling Values",
+          log
+        });
+      } catch (progressError) {
+        log.info(`Progress update failed (non-critical): ${progressError.message}`);
+      }
+    }
+    
     const user = process.env[config.envCredentials.user];
     const password = process.env[config.envCredentials.password];
     
@@ -39,12 +54,42 @@ export async function handleProfilingValuesSoll({ page, crawler, log }) {
     currentStep++;
     logStep({ step: "Navigate to PAT administration", current: currentStep, total: totalSteps, log });
     
+    // Send progress update for navigation step
+    if (runId) {
+      try {
+        await sendProgressUpdate({
+          runId,
+          done: currentStep,
+          total: totalSteps,
+          description: "Navigate to PAT administration",
+          log
+        });
+      } catch (progressError) {
+        log.info(`Progress update failed (non-critical): ${progressError.message}`);
+      }
+    }
+    
     await page.locator('a:has-text("PAT-Verwaltung")').click();
     log.info("Clicked on 'PAT-Verwaltung' successfully");
     
     // STEP 3: Filter and search for code
     currentStep++;
     logStep({ step: "Search for code", current: currentStep, total: totalSteps, log });
+    
+    // Send progress update for search step
+    if (runId) {
+      try {
+        await sendProgressUpdate({
+          runId,
+          done: currentStep,
+          total: totalSteps,
+          description: "Search for code",
+          log
+        });
+      } catch (progressError) {
+        log.info(`Progress update failed (non-critical): ${progressError.message}`);
+      }
+    }
     
     await page.locator("input[name=filter_text]").waitFor({ state: "visible" });
     await page.locator("input[name=filter_text]").clear();
@@ -59,6 +104,21 @@ export async function handleProfilingValuesSoll({ page, crawler, log }) {
     // STEP 4: Wait for PAT container and extract data
     currentStep++;
     logStep({ step: "Extract PAT data", current: currentStep, total: totalSteps, log });
+    
+    // Send progress update for extraction step
+    if (runId) {
+      try {
+        await sendProgressUpdate({
+          runId,
+          done: currentStep,
+          total: totalSteps,
+          description: "Extract PAT data",
+          log
+        });
+      } catch (progressError) {
+        log.info(`Progress update failed (non-critical): ${progressError.message}`);
+      }
+    }
     
     await page.locator("#pat_container").waitFor({ state: "visible" });
     log.info("PAT container is visible, extracting data...");
@@ -122,6 +182,7 @@ export async function handleProfilingValuesSoll({ page, crawler, log }) {
         runId,
         done: currentStep,
         total: totalSteps,
+        description: "Extract PAT data",
         log
       });
     }
@@ -129,6 +190,21 @@ export async function handleProfilingValuesSoll({ page, crawler, log }) {
     // STEP 5: Save results
     currentStep++;
     logStep({ step: "Save results to dataset", current: currentStep, total: totalSteps, log });
+    
+    // Send progress update for save step
+    if (runId) {
+      try {
+        await sendProgressUpdate({
+          runId,
+          done: currentStep,
+          total: totalSteps,
+          description: "Save results to dataset",
+          log
+        });
+      } catch (progressError) {
+        log.info(`Progress update failed (non-critical): ${progressError.message}`);
+      }
+    }
     
     await Dataset.pushData(result);
     
@@ -139,6 +215,7 @@ export async function handleProfilingValuesSoll({ page, crawler, log }) {
         done: totalSteps,
         total: totalSteps,
         status: 'COMPLETED',
+        description: 'Completed',
         log
       });
     }

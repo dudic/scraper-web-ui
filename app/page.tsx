@@ -1,13 +1,9 @@
 'use client'
 
-import { useState } from 'react'
 import { ImportForm } from '@/components/ImportForm'
-import { RunProgress } from '@/components/RunProgress'
 import { RunList } from '@/components/RunList'
 
 export default function Home() {
-  const [currentRunId, setCurrentRunId] = useState<string | null>(null)
-
   return (
     <main className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
       <div className="container mx-auto px-4 py-8">
@@ -24,15 +20,8 @@ export default function Home() {
 
           {/* Import Form */}
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 mb-8">
-            <ImportForm onRunStart={setCurrentRunId} />
+            <ImportForm />
           </div>
-
-          {/* Current Run Progress */}
-          {currentRunId && (
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 mb-8">
-              <RunProgress runId={currentRunId} />
-            </div>
-          )}
 
           {/* Run History */}
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">

@@ -2,11 +2,7 @@
 
 import { useState } from 'react'
 
-interface ImportFormProps {
-  onRunStart: (runId: string) => void
-}
-
-export function ImportForm({ onRunStart }: ImportFormProps) {
+export function ImportForm() {
   const [actorId, setActorId] = useState('HceSv1pj0Y3PZTMvG')
   const [code, setCode] = useState('')
   const [codeType, setCodeType] = useState('HR_COCKPIT')
@@ -61,7 +57,8 @@ export function ImportForm({ onRunStart }: ImportFormProps) {
         throw new Error('No run ID received from server')
       }
 
-      onRunStart(data.runId)
+      // Show success message
+      alert(`Import started successfully! Run ID: ${data.runId}`)
       
       // Reset form
       setActorId('HceSv1pj0Y3PZTMvG')

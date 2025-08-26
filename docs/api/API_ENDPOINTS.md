@@ -2,7 +2,7 @@
 
 ## 📋 Overview
 
-This document provides a complete reference for all API endpoints in the Scraper Dashboard, including existing functionality and new file storage features.
+This document provides a complete reference for all API endpoints in the Scraper Dashboard, reflecting the current UUID-based implementation with all features.
 
 ## 🔐 Authentication
 
@@ -41,7 +41,7 @@ Starts a new scraping run.
 **Response (200):**
 ```json
 {
-  "runId": "abc123def456",
+  "runId": "550e8400-e29b-41d4-a716-446655440000",
   "message": "Run started successfully"
 }
 ```
@@ -68,10 +68,11 @@ Receives progress updates from APIFY actors.
 **Request Body:**
 ```json
 {
-  "runId": "abc123def456",
+  "runId": "550e8400-e29b-41d4-a716-446655440000",
   "done": 5,
   "total": 10,
   "status": "RUNNING",
+  "description": "Download Assessment-Report",
   "error": "Error message (optional)"
 }
 ```
@@ -80,11 +81,12 @@ Receives progress updates from APIFY actors.
 ```json
 {
   "ok": true,
-  "runId": "abc123def456",
+  "runId": "550e8400-e29b-41d4-a716-446655440000",
   "pct": 50,
   "status": "RUNNING",
   "done": 5,
-  "total": 10
+  "total": 10,
+  "description": "Download Assessment-Report"
 }
 ```
 
@@ -92,6 +94,41 @@ Receives progress updates from APIFY actors.
 ```json
 {
   "error": "Unauthorized"
+}
+```
+
+**Response (404):**
+```json
+{
+  "error": "Run not found in database"
+}
+```
+
+### DELETE `/api/runs/{runId}`
+Deletes a run and all associated files.
+
+**Authentication:** None (public endpoint)
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "message": "Run and associated files deleted successfully",
+  "deletedFiles": 3
+}
+```
+
+**Response (404):**
+```json
+{
+  "error": "Run not found"
+}
+```
+
+**Response (500):**
+```json
+{
+  "error": "Failed to delete run"
 }
 ```
 
@@ -145,7 +182,7 @@ Lists all files for a specific run.
 {
   "files": [
     {
-      "id": "uuid-here",
+      "id": "550e8400-e29b-41d4-a716-446655440001",
       "filename": "report.pdf",
       "contentType": "application/pdf",
       "fileSize": 1024000,
@@ -223,14 +260,18 @@ Lists all runs (if implemented).
 {
   "runs": [
     {
-      "id": "abc123def456",
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "apify_run_id": "abc123def456",
+      "code": "ABC123",
+      "code_type": "HR_COCKPIT",
       "pct": 100,
       "status": "SUCCEEDED",
       "done": 5,
       "total": 5,
-      "fileCount": 3,
-      "startedAt": "2025-01-15T10:00:00Z",
-      "updatedAt": "2025-01-15T10:30:00Z"
+      "description": "Completed",
+      "file_count": 3,
+      "started_at": "2025-01-15T10:00:00Z",
+      "updated_at": "2025-01-15T10:30:00Z"
     }
   ],
   "total": 25,
@@ -270,10 +311,11 @@ await fetch(`${process.env.FRONT_URL}/api/actor-update`, {
     Authorization: `Bearer ${process.env.ACTOR_SECRET}`,
   },
   body: JSON.stringify({
-    runId: process.env.APIFY_ACTOR_RUN_ID,
+    runId: internalRunId, // Supabase UUID, not Apify run ID
     done: processedCount,
     total: totalCount,
-    status: 'RUNNING'
+    status: 'RUNNING',
+    description: 'Current step description'
   })
 });
 
@@ -285,10 +327,11 @@ await fetch(`${process.env.FRONT_URL}/api/actor-update`, {
     Authorization: `Bearer ${process.env.ACTOR_SECRET}`,
   },
   body: JSON.stringify({
-    runId: process.env.APIFY_ACTOR_RUN_ID,
+    runId: internalRunId, // Supabase UUID
     done: totalCount,
     total: totalCount,
-    status: 'COMPLETED'
+    status: 'SUCCEEDED',
+    description: 'Completed'
   })
 });
 ```
@@ -322,6 +365,7 @@ All endpoints validate:
 - Data types
 - File size limits
 - MIME type restrictions
+- UUID format validation
 
 ### Error Handling
 Errors are logged but sensitive information is not exposed in responses.
@@ -343,15 +387,20 @@ curl -X POST "https://your-app.vercel.app/api/import" \
 
 ### Processing Files
 ```bash
-curl -X POST "https://your-app.vercel.app/api/files/process/abc123def456" \
+curl -X POST "https://your-app.vercel.app/api/files/process/550e8400-e29b-41d4-a716-446655440000" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer your-actor-secret" \
   -d '{"force": false}'
 ```
 
+### Deleting a Run
+```bash
+curl -X DELETE "https://your-app.vercel.app/api/runs/550e8400-e29b-41d4-a716-446655440000"
+```
+
 ### Downloading a File
 ```bash
-curl -X GET "https://your-app.vercel.app/api/files/uuid-here/download"
+curl -X GET "https://your-app.vercel.app/api/files/550e8400-e29b-41d4-a716-446655440001/download"
 ```
 
 ## 🐛 Error Handling
@@ -386,14 +435,39 @@ curl -X GET "https://your-app.vercel.app/api/files/uuid-here/download"
 }
 ```
 
+#### UUID Validation Errors
+```json
+{
+  "error": "Invalid UUID format",
+  "details": "runId must be a valid UUID"
+}
+```
+
+## 🚨 Important Notes
+
+### UUID-Based Identification
+- **All endpoints** use Supabase-generated UUIDs for identification
+- **Apify run IDs** are stored for reference only
+- **Never use Apify run IDs** for database operations
+
+### Description Field
+- **New field** added to track current step descriptions
+- **Sent by actors** during progress updates
+- **Displayed in frontend** for better user experience
+
+### File Processing
+- **Automatic triggering** when runs complete
+- **Content type detection** for proper file handling
+- **Signed URLs** for secure file access
+
 ## 📚 Related Documentation
 
-- [FILE_STORAGE_FEATURES.md](./FILE_STORAGE_FEATURES.md) - File storage implementation details
-- [README.md](./README.md) - Main project documentation
-- [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) - Deployment instructions
+- [CURRENT_SCHEMA.md](../database/CURRENT_SCHEMA.md) - Current database schema
+- [DEPLOYMENT_GUIDE.md](../deployment/DEPLOYMENT_GUIDE.md) - Deployment instructions
+- [UUID_IDENTIFICATION_GUIDE.md](../development/UUID_IDENTIFICATION_GUIDE.md) - UUID usage guidelines
 
 ---
 
 **Last Updated**: January 2025  
-**Version**: 1.0.0  
-**Status**: Planning Phase
+**Version**: 2.0.0  
+**Status**: Current Implementation

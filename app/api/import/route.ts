@@ -79,6 +79,7 @@ export async function POST(request: NextRequest) {
         status: 'STARTING',
         done: 0,
         total: 0,
+        description: 'Initializing...',
         started_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       }

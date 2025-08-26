@@ -10,10 +10,11 @@
  * @param {number} params.done - Number of completed items
  * @param {number} params.total - Total number of items
  * @param {string} params.status - Current status (optional)
+ * @param {string} params.description - Description of current step (optional)
  * @param {Object} params.log - Logger instance
  * @returns {Promise<void>}
  */
-export async function sendProgressUpdate({ runId, done, total, status = 'RUNNING', log }) {
+export async function sendProgressUpdate({ runId, done, total, status = 'RUNNING', description, log }) {
   const frontUrl = process.env.FRONT_URL;
   const actorSecret = process.env.ACTOR_SECRET;
   
@@ -42,7 +43,8 @@ export async function sendProgressUpdate({ runId, done, total, status = 'RUNNING
         runId,
         done,
         total,
-        status
+        status,
+        description
       }),
     });
     
@@ -70,6 +72,7 @@ export async function sendCompletionUpdate({ runId, total, log }) {
     done: total,
     total,
     status: 'COMPLETED',
+    description: 'Completed',
     log
   });
 }
@@ -110,7 +113,8 @@ export async function sendErrorUpdate({ runId, error, log }) {
       body: JSON.stringify({
         runId,
         status: 'FAILED',
-        error: error.message || error
+        error: error.message || error,
+        description: 'Failed'
       }),
     });
     
