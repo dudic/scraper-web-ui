@@ -37,12 +37,22 @@ export async function POST(request: NextRequest) {
     
     const supabase = createClient(supabaseUrl, supabaseKey)
 
-    // Get current run data to preserve existing values
-    const { data: currentRun } = await supabase
+    // Find the run record by apify_run_id (the runId from Apify)
+    const { data: currentRun, error: findError } = await supabase
       .from('runs')
       .select('*')
-      .eq('id', runId)
+      .eq('apify_run_id', runId)
       .single()
+
+    if (findError) {
+      console.error('❌ Error finding run by apify_run_id:', findError)
+      return NextResponse.json(
+        { error: 'Run not found in database' },
+        { status: 404 }
+      )
+    }
+
+    console.log('✅ Found run record:', currentRun.id, 'for Apify run:', runId)
 
     // Calculate percentage and determine final status
     let pct = 0
@@ -91,7 +101,7 @@ export async function POST(request: NextRequest) {
       pct = currentRun.pct
     }
 
-    // Prepare data for update - ONLY progress-related fields
+    // Prepare data for update - only update progress fields, never code/code_type
     const runData: any = {
       pct,
       status: finalStatus,
@@ -103,19 +113,26 @@ export async function POST(request: NextRequest) {
     if (finalTotal !== undefined) runData.total = finalTotal
     if (error) runData.error = error
     
-    // Use UPDATE instead of UPSERT - we only update progress fields
+    console.log('🔍 Actor Update - Updating progress only:')
+    console.log('  internal run ID:', currentRun.id)
+    console.log('  apify run ID:', runId)
+    console.log('  runData:', JSON.stringify(runData, null, 2))
+    
+    // Update the run record using the internal ID
     const { error: dbError } = await supabase
       .from('runs')
       .update(runData)
-      .eq('id', runId)
+      .eq('id', currentRun.id)
 
     if (dbError) {
-      console.error('Database error:', dbError)
+      console.error('❌ Database error:', dbError)
       return NextResponse.json(
         { error: 'Failed to update run record', details: dbError.message },
         { status: 500 }
       )
     }
+
+    console.log('✅ Run record updated successfully')
 
     // Trigger file processing if run just completed
     let fileProcessingTriggered = false
@@ -123,9 +140,9 @@ export async function POST(request: NextRequest) {
       try {
         // Trigger file processing asynchronously (don't wait for it)
         const baseUrl = process.env.FRONT_URL?.replace(/\/+$/, '') || 'http://localhost:3000';
-        const fileProcessingUrl = `${baseUrl}/api/files/process/${runId}`;
+        const fileProcessingUrl = `${baseUrl}/api/files/process/${currentRun.id}`;
         
-        console.log(`Triggering file processing for run ${runId} at: ${fileProcessingUrl}`);
+        console.log(`Triggering file processing for run ${currentRun.id} at: ${fileProcessingUrl}`);
         
         fetch(fileProcessingUrl, {
           method: 'POST',
@@ -144,7 +161,8 @@ export async function POST(request: NextRequest) {
     
     return NextResponse.json({ 
       ok: true, 
-      runId, 
+      runId: currentRun.id, // Return internal ID
+      apifyRunId: runId,    // Return Apify run ID
       pct, 
       status: finalStatus,
       done: finalDone,
@@ -152,7 +170,7 @@ export async function POST(request: NextRequest) {
       fileProcessingTriggered
     })
   } catch (error) {
-    console.error('Actor update error:', error)
+    console.error('❌ Actor update error:', error)
     return NextResponse.json(
       { error: 'Failed to process actor update' },
       { status: 500 }

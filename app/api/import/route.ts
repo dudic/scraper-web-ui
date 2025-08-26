@@ -18,6 +18,88 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Initialize Supabase client first
+    const supabaseUrl = process.env.SUPABASE_URL!
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+    
+    if (!supabaseUrl || !supabaseKey) {
+      console.error('Missing Supabase environment variables')
+      return NextResponse.json(
+        { error: 'Database configuration error' },
+        { status: 500 }
+      )
+    }
+    
+    const supabase = createClient(supabaseUrl, supabaseKey)
+
+    // Extract code and code_type from input
+    const code = input?.code || null
+    const code_type = input?.codeType || null
+
+    console.log('🔍 DEBUG - Extracted values:')
+    console.log('  code:', code)
+    console.log('  code_type:', code_type)
+
+    // Check if a record with this code/code_type combination already exists
+    const { data: existingRun, error: checkError } = await supabase
+      .from('runs')
+      .select('id, apify_run_id')
+      .eq('code', code)
+      .eq('code_type', code_type)
+      .single()
+
+    if (checkError && checkError.code !== 'PGRST116') { // PGRST116 = no rows returned
+      console.error('❌ Error checking for existing run:', checkError)
+      return NextResponse.json(
+        { error: 'Failed to check for existing run' },
+        { status: 500 }
+      )
+    }
+
+    let runId: string
+
+    if (existingRun) {
+      // Use existing record
+      console.log('✅ Found existing run record:', existingRun.id)
+      runId = existingRun.id
+    } else {
+      // Create new record with temporary ID
+      const tempId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      
+      const runData = {
+        id: tempId,
+        apify_run_id: null, // Will be updated after Apify call
+        code: code,
+        code_type: code_type,
+        pct: 0,
+        status: 'STARTING',
+        done: 0,
+        total: 0,
+        started_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+
+      console.log('🔍 DEBUG - Creating new record with temp ID:')
+      console.log('  runData:', JSON.stringify(runData, null, 2))
+
+      const { data: insertedData, error: dbError } = await supabase
+        .from('runs')
+        .insert(runData)
+        .select()
+
+      if (dbError) {
+        console.error('❌ Database error creating new record:', dbError)
+        return NextResponse.json(
+          { error: 'Failed to create run record in database' },
+          { status: 500 }
+        )
+      }
+
+      console.log('✅ New record created successfully:')
+      console.log('  insertedData:', JSON.stringify(insertedData, null, 2))
+      runId = tempId
+    }
+
     // Initialize Apify client
     const apifyToken = process.env.APIFY_TOKEN
     if (!apifyToken) {
@@ -53,63 +135,29 @@ export async function POST(request: NextRequest) {
 
     console.log('✅ Apify run started with ID:', run.id)
 
-    // Initialize Supabase client
-    const supabaseUrl = process.env.SUPABASE_URL!
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-    
-    if (!supabaseUrl || !supabaseKey) {
-      console.error('Missing Supabase environment variables')
-      return NextResponse.json(
-        { error: 'Database configuration error' },
-        { status: 500 }
-      )
-    }
-    
-    const supabase = createClient(supabaseUrl, supabaseKey)
-
-    // Extract code and code_type from input
-    const code = input?.code || null
-    const code_type = input?.codeType || null
-
-    console.log('🔍 DEBUG - Extracted values:')
-    console.log('  code:', code)
-    console.log('  code_type:', code_type)
-
-    // Prepare data for database insertion
-    const runData = {
-      id: run.id,
-      code: code,
-      code_type: code_type,
-      pct: 0,
-      status: 'RUNNING',
-      done: 0,
-      total: 0,
-      started_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    }
-
-    console.log('🔍 DEBUG - Data to be inserted:')
-    console.log('  runData:', JSON.stringify(runData, null, 2))
-
-    // Use upsert to handle existing run IDs
-    const { data: insertedData, error: dbError } = await supabase
+    // Update the record with the actual Apify run ID
+    const { error: updateError } = await supabase
       .from('runs')
-      .upsert(runData, { onConflict: 'id' })
-      .select()
+      .update({ 
+        apify_run_id: run.id,
+        status: 'RUNNING',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', runId)
 
-    if (dbError) {
-      console.error('❌ Database error:', dbError)
+    if (updateError) {
+      console.error('❌ Error updating record with Apify run ID:', updateError)
       return NextResponse.json(
-        { error: 'Failed to create run record in database' },
+        { error: 'Failed to update run record with Apify ID' },
         { status: 500 }
       )
     }
 
-    console.log('✅ Database insertion successful:')
-    console.log('  insertedData:', JSON.stringify(insertedData, null, 2))
+    console.log('✅ Record updated with Apify run ID successfully')
 
     return NextResponse.json({ 
-      runId: run.id,
+      runId: runId,
+      apifyRunId: run.id,
       message: 'Run started successfully'
     })
   } catch (error) {
