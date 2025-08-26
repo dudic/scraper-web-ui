@@ -4,6 +4,12 @@ import { ApifyClient } from 'apify-client'
 
 export async function POST(request: NextRequest) {
   try {
+    console.log('🚀 === IMPORT ROUTE CALLED ===')
+    console.log('📅 Timestamp:', new Date().toISOString())
+    console.log('🔗 Request URL:', request.url)
+    console.log('👤 User Agent:', request.headers.get('user-agent'))
+    console.log('🔑 Authorization:', request.headers.get('authorization') ? 'Present' : 'None')
+    
     const { actorId, input } = await request.json()
 
     // DEBUG: Log the received data
@@ -40,10 +46,10 @@ export async function POST(request: NextRequest) {
     console.log('  code:', code)
     console.log('  code_type:', code_type)
 
-    // Check if a record with this code/code_type combination already exists
+        // Check if a record with this code/code_type combination already exists
     const { data: existingRun, error: checkError } = await supabase
       .from('runs')
-      .select('run_id, apify_run_id')
+      .select('id, apify_run_id')
       .eq('code', code)
       .eq('code_type', code_type)
       .single()
@@ -60,12 +66,12 @@ export async function POST(request: NextRequest) {
 
     if (existingRun) {
       // Use existing record
-      console.log('✅ Found existing run record:', existingRun.run_id)
-      runId = existingRun.run_id
+      console.log('✅ Found existing run record:', existingRun.id)
+      runId = existingRun.id
     } else {
-      // Create new record - let Supabase auto-generate the run_id
+      // Create new record - let Supabase auto-generate the id (UUID)
       const runData = {
-        // Don't specify run_id - let Supabase auto-generate it
+        // Don't specify id - let Supabase auto-generate UUID
         apify_run_id: null, // Will be updated after Apify call
         code: code,
         code_type: code_type,
@@ -77,13 +83,13 @@ export async function POST(request: NextRequest) {
         updated_at: new Date().toISOString(),
       }
 
-      console.log('🔍 DEBUG - Creating new record (Supabase will auto-generate run_id):')
+      console.log('🔍 DEBUG - Creating new record (Supabase will auto-generate UUID):')
       console.log('  runData:', JSON.stringify(runData, null, 2))
 
       const { data: insertedData, error: dbError } = await supabase
         .from('runs')
         .insert(runData)
-        .select('run_id') // Select the auto-generated run_id
+        .select('id') // Select the auto-generated UUID
 
       if (dbError) {
         console.error('❌ Database error creating new record:', dbError)
@@ -95,7 +101,8 @@ export async function POST(request: NextRequest) {
 
       console.log('✅ New record created successfully:')
       console.log('  insertedData:', JSON.stringify(insertedData, null, 2))
-      runId = insertedData[0].run_id // Use the auto-generated run_id
+      console.log('🆔 Generated UUID:', insertedData[0].id)
+      runId = insertedData[0].id // Use the auto-generated UUID
     }
 
     // Initialize Apify client
@@ -117,6 +124,11 @@ export async function POST(request: NextRequest) {
       ...input,
       internalRunId: runId // Pass the internal run ID to Apify
     }
+    
+    console.log('📤 Sending to Apify:')
+    console.log('  Actor ID:', actorId)
+    console.log('  Internal Run ID:', runId)
+    console.log('  Apify Input:', JSON.stringify(apifyInput, null, 2))
 
     // Start the Apify run
     let run
@@ -147,7 +159,7 @@ export async function POST(request: NextRequest) {
         status: 'RUNNING',
         updated_at: new Date().toISOString()
       })
-      .eq('run_id', runId) // Use run_id instead of id
+      .eq('id', runId) // Use id (UUID) instead of run_id
 
     if (updateError) {
       console.error('❌ Error updating record with Apify run ID:', updateError)
@@ -158,6 +170,7 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('✅ Record updated with Apify run ID successfully')
+    console.log('🏁 === IMPORT ROUTE COMPLETED ===')
 
     return NextResponse.json({ 
       runId: runId,

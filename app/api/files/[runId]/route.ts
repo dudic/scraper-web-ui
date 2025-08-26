@@ -48,7 +48,7 @@ export async function GET(
     const { data: files, error: filesError } = await supabase
       .from('files')
       .select('*')
-      .eq('run_id', runId)
+      .eq('run_uuid', runId)
       .order('created_at', { ascending: false })
 
     if (filesError) {
