@@ -37,22 +37,22 @@ export async function POST(request: NextRequest) {
     
     const supabase = createClient(supabaseUrl, supabaseKey)
 
-    // Find the run record by apify_run_id (the runId from Apify)
+    // Find the run record by internal run_id (the runId from Apify is now the internal run_id)
     const { data: currentRun, error: findError } = await supabase
       .from('runs')
       .select('*')
-      .eq('apify_run_id', runId)
+      .eq('run_id', runId) // Use run_id instead of apify_run_id
       .single()
 
     if (findError) {
-      console.error('❌ Error finding run by apify_run_id:', findError)
+      console.error('❌ Error finding run by internal run_id:', findError)
       return NextResponse.json(
         { error: 'Run not found in database' },
         { status: 404 }
       )
     }
 
-    console.log('✅ Found run record:', currentRun.id, 'for Apify run:', runId)
+    console.log('✅ Found run record:', currentRun.run_id, 'for internal run ID:', runId)
 
     // Calculate percentage and determine final status
     let pct = 0
@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
     if (error) runData.error = error
     
     console.log('🔍 Actor Update - Updating progress only:')
-    console.log('  internal run ID:', currentRun.id)
+    console.log('  internal run ID:', currentRun.run_id)
     console.log('  apify run ID:', runId)
     console.log('  runData:', JSON.stringify(runData, null, 2))
     
@@ -122,7 +122,7 @@ export async function POST(request: NextRequest) {
     const { error: dbError } = await supabase
       .from('runs')
       .update(runData)
-      .eq('id', currentRun.id)
+      .eq('run_id', currentRun.run_id) // Use run_id instead of id
 
     if (dbError) {
       console.error('❌ Database error:', dbError)
@@ -140,9 +140,9 @@ export async function POST(request: NextRequest) {
       try {
         // Trigger file processing asynchronously (don't wait for it)
         const baseUrl = process.env.FRONT_URL?.replace(/\/+$/, '') || 'http://localhost:3000';
-        const fileProcessingUrl = `${baseUrl}/api/files/process/${currentRun.id}`;
+        const fileProcessingUrl = `${baseUrl}/api/files/process/${currentRun.run_id}`;
         
-        console.log(`Triggering file processing for run ${currentRun.id} at: ${fileProcessingUrl}`);
+        console.log(`Triggering file processing for run ${currentRun.run_id} at: ${fileProcessingUrl}`);
         
         fetch(fileProcessingUrl, {
           method: 'POST',
@@ -161,7 +161,7 @@ export async function POST(request: NextRequest) {
     
     return NextResponse.json({ 
       ok: true, 
-      runId: currentRun.id, // Return internal ID
+      runId: currentRun.run_id, // Return internal ID
       apifyRunId: runId,    // Return Apify run ID
       pct, 
       status: finalStatus,

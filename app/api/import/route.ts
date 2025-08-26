@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     // Check if a record with this code/code_type combination already exists
     const { data: existingRun, error: checkError } = await supabase
       .from('runs')
-      .select('id, apify_run_id')
+      .select('run_id, apify_run_id')
       .eq('code', code)
       .eq('code_type', code_type)
       .single()
@@ -60,14 +60,12 @@ export async function POST(request: NextRequest) {
 
     if (existingRun) {
       // Use existing record
-      console.log('✅ Found existing run record:', existingRun.id)
-      runId = existingRun.id
+      console.log('✅ Found existing run record:', existingRun.run_id)
+      runId = existingRun.run_id
     } else {
-      // Create new record with temporary ID
-      const tempId = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-      
+      // Create new record - let Supabase auto-generate the run_id
       const runData = {
-        id: tempId,
+        // Don't specify run_id - let Supabase auto-generate it
         apify_run_id: null, // Will be updated after Apify call
         code: code,
         code_type: code_type,
@@ -79,13 +77,13 @@ export async function POST(request: NextRequest) {
         updated_at: new Date().toISOString(),
       }
 
-      console.log('🔍 DEBUG - Creating new record with temp ID:')
+      console.log('🔍 DEBUG - Creating new record (Supabase will auto-generate run_id):')
       console.log('  runData:', JSON.stringify(runData, null, 2))
 
       const { data: insertedData, error: dbError } = await supabase
         .from('runs')
         .insert(runData)
-        .select()
+        .select('run_id') // Select the auto-generated run_id
 
       if (dbError) {
         console.error('❌ Database error creating new record:', dbError)
@@ -97,7 +95,7 @@ export async function POST(request: NextRequest) {
 
       console.log('✅ New record created successfully:')
       console.log('  insertedData:', JSON.stringify(insertedData, null, 2))
-      runId = tempId
+      runId = insertedData[0].run_id // Use the auto-generated run_id
     }
 
     // Initialize Apify client
@@ -114,10 +112,16 @@ export async function POST(request: NextRequest) {
       token: apifyToken,
     })
 
+    // Prepare input for Apify - include the internal run ID
+    const apifyInput = {
+      ...input,
+      internalRunId: runId // Pass the internal run ID to Apify
+    }
+
     // Start the Apify run
     let run
     try {
-      run = await client.actor(actorId).call(input || {})
+      run = await client.actor(actorId).call(apifyInput)
     } catch (apifyError) {
       console.error('Apify API error:', apifyError)
       return NextResponse.json(
@@ -143,7 +147,7 @@ export async function POST(request: NextRequest) {
         status: 'RUNNING',
         updated_at: new Date().toISOString()
       })
-      .eq('id', runId)
+      .eq('run_id', runId) // Use run_id instead of id
 
     if (updateError) {
       console.error('❌ Error updating record with Apify run ID:', updateError)
